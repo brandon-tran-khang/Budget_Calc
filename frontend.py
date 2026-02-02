@@ -76,7 +76,7 @@ st.markdown("""
 @st.cache_data
 def load_data():
     # Update path to your specific directory
-    directory = Path("/Users/brandontran/Desktop/Code")
+    directory = Path("/Users/brandontran/Desktop/Code/Budget_Calc/Data")
     
     df_trans = pd.DataFrame()
     df_payments = pd.DataFrame()
