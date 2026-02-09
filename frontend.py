@@ -112,9 +112,9 @@ with st.sidebar:
     months = ['All'] + sorted(df_trans['Month'].unique().tolist(), key=lambda m: datetime.datetime.strptime(m, "%B").month)
     selected_month = st.selectbox("Select Month", months)
     
-    # Category Filter
-    categories = ['All'] + sorted(df_trans['Category'].unique().tolist())
-    selected_category = st.selectbox("Select Category", categories)
+    # UPDATED: Category Filter to use Budget_Category
+    categories = ['All'] + sorted(df_trans['Budget_Category'].unique().tolist())
+    selected_category = st.selectbox("Select Budget Category", categories)
 
     st.markdown("---")
     st.caption(f"Last Updated: {datetime.date.today()}")
@@ -123,8 +123,9 @@ with st.sidebar:
 df_filtered = df_trans.copy()
 if selected_month != 'All':
     df_filtered = df_filtered[df_filtered['Month'] == selected_month]
+# UPDATED: Filter logic for Budget_Category
 if selected_category != 'All':
-    df_filtered = df_filtered[df_filtered['Category'] == selected_category]
+    df_filtered = df_filtered[df_filtered['Budget_Category'] == selected_category]
 
 # --- Main Dashboard ---
 
@@ -146,7 +147,7 @@ if not df_payments.empty:
     pay_view = df_payments.copy()
     if selected_month != 'All':
         pay_view = pay_view[pay_view['Month'] == selected_month]
-    # In raw CSV payments are positive, but check 'Amount' column
+    # In raw CSV payments are positive
     total_payments_made = pay_view['Amount'].sum()
 
 with col1:
@@ -154,15 +155,14 @@ with col1:
 with col2:
     st.metric("Transactions", f"{tx_count}")
 with col3:
-    # Top Category
+    # UPDATED: Top Category now uses Budget_Category
     if not df_filtered.empty:
-        top_cat = df_filtered.groupby('Category')['Net_Amount'].sum().idxmax()
-        top_cat_amount = df_filtered.groupby('Category')['Net_Amount'].sum().max()
+        top_cat = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().idxmax()
+        top_cat_amount = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().max()
         st.metric("Top Category", top_cat, f"${top_cat_amount:,.0f}")
     else:
         st.metric("Top Category", "N/A", "$0")
 with col4:
-    # New Metric: Payments Made
     st.metric("Card Payments Made", f"${total_payments_made:,.2f}", 
               help="Payments to credit card balance (excluded from spending)")
 
@@ -177,9 +177,7 @@ with tab1:
     
     with col_chart1:
         st.subheader("Spending Trend Over Time")
-        # Aggregate by Date
         time_group = df_filtered.groupby('Transaction Date')['Net_Amount'].sum().reset_index()
-        # Ensure positive visualization
         time_group['Net_Amount'] = abs(time_group['Net_Amount'])
         
         fig_trend = px.line(time_group, x='Transaction Date', y='Net_Amount', 
@@ -190,26 +188,22 @@ with tab1:
         
     with col_chart2:
         st.subheader("Category Split")
-        cat_group = df_filtered.groupby('Category')['Net_Amount'].sum().reset_index()
-        # Handle potential negative net amounts (returns) for pie chart by zeroing them or abs
+        # UPDATED: Pi chart now uses Budget_Category
+        cat_group = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().reset_index()
         cat_group['Net_Amount'] = cat_group['Net_Amount'].clip(lower=0) 
         
-        fig_pie = px.pie(cat_group, values='Net_Amount', names='Category', hole=0.6,
+        fig_pie = px.pie(cat_group, values='Net_Amount', names='Budget_Category', hole=0.6,
                               color_discrete_sequence=px.colors.qualitative.Prism)
         
         fig_pie.update_layout(height=350, showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
 
-# TAB 2: VENDOR ANALYSIS
+# TAB 2: VENDOR ANALYSIS (No changes needed, uses merchant name)
 with tab2:
     st.subheader("Where does the money actually go?")
-    
     col_v1, col_v2 = st.columns([2, 1])
-    
     with col_v1:
-        # Bar chart of top Merchants
         merchant_group = df_filtered.groupby('Clean_Description')['Net_Amount'].sum().sort_values(ascending=True).tail(10)
-        
         fig_bar = go.Figure(go.Bar(
             x=merchant_group.values,
             y=merchant_group.index,
@@ -218,7 +212,6 @@ with tab2:
         ))
         fig_bar.update_layout(title="Top 10 Merchants by Spend", height=500, template="plotly_white")
         st.plotly_chart(fig_bar, use_container_width=True)
-        
     with col_v2:
         st.info("💡 **Insight:** This view helps you identify 'Subscription Creep' or frequent small purchases that add up.")
         st.write("**Top 5 Most Frequent Places**")
@@ -229,13 +222,14 @@ with tab2:
 with tab3:
     st.subheader("Detailed Transaction Log")
     
+    # UPDATED: Table now displays Budget_Category instead of bank Category
     st.dataframe(
-        df_filtered[['Transaction Date', 'Clean_Description', 'Category', 'Net_Amount']]
+        df_filtered[['Transaction Date', 'Clean_Description', 'Budget_Category', 'Net_Amount']]
         .sort_values('Transaction Date', ascending=False),
         column_config={
             "Transaction Date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
             "Clean_Description": st.column_config.TextColumn("Merchant"),
-            "Category": st.column_config.TextColumn("Category"),
+            "Budget_Category": st.column_config.TextColumn("Budget Category"),
             "Net_Amount": st.column_config.NumberColumn(
                 "Amount", 
                 format="$%.2f",
@@ -247,40 +241,32 @@ with tab3:
         hide_index=True
     )
 
-# TAB 4: FORECASTING
+# TAB 4: FORECASTING (No changes needed, uses dates and total Net_Amount)
 with tab4:
     st.subheader("End of Year Projection")
-    
-    # Calculate days passed in 2026
     current_date = datetime.date.today()
     start_date = datetime.date(2026, 1, 1)
     days_passed = (current_date - start_date).days
-    
-    # Handle edge case if run early in year
     if days_passed < 1: days_passed = 1
     
-    total_spend_ytd = df_trans['Net_Amount'].sum() # Use total SPENDING (excluding payments)
+    total_spend_ytd = df_trans['Net_Amount'].sum()
     daily_avg = total_spend_ytd / days_passed
     projected_total = daily_avg * 365
     
     col_f1, col_f2 = st.columns(2)
-    
     with col_f1:
         st.metric("Current Daily Burn Rate", f"${daily_avg:,.2f} / day")
     with col_f2:
         st.metric("Projected 2026 Total", f"${projected_total:,.2f}", 
                   help="Assumes you keep spending at exactly this rate for the rest of the year.")
         
-    # Visualizing the projection
     dates = pd.date_range(start='2026-01-01', end='2026-12-31', freq='M')
     projection_values = [daily_avg * d.day_of_year for d in dates]
     
     fig_proj = go.Figure()
     fig_proj.add_trace(go.Scatter(x=dates, y=projection_values, mode='lines', name='Projection', line=dict(dash='dot', color='gray')))
     
-    # Add actuals
     actual_cum = df_trans.sort_values('Transaction Date').set_index('Transaction Date')['Net_Amount'].cumsum()
-    # Resample to match projection frequency roughly for clean charting
     actual_cum_resampled = actual_cum.resample('M').last()
     
     fig_proj.add_trace(go.Scatter(x=actual_cum_resampled.index, y=actual_cum_resampled.values, 
