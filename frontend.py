@@ -73,6 +73,46 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- Category Mapping Configuration ---
+BUDGET_CATEGORIES = [
+    "Home Electricity", "Home Water/Trash", "Home Furniture", "Internet",
+    "Phone Bill", "HOA Bill", "Home Maintenance", "Car Registration",
+    "Discord Subscription", "Spotify Subscription", "Amazon Prime Subscription",
+    "Gym Membership", "Chase Sapphire Preferred Fee", "Costco Membership",
+    "Groceries", "Gas", "Restaurants", "Health / Doctors", "Car Maintenance",
+    "Pest control", "Landscaping", "Games", "Vacation", "Personal"
+]
+
+MAPPINGS_FILE = Path(__file__).resolve().parent / "category_mappings.csv"
+
+@st.cache_data
+def load_mappings():
+    """Load category mappings from external CSV. Returns a dict."""
+    if not MAPPINGS_FILE.exists():
+        return {}
+    try:
+        mappings_df = pd.read_csv(MAPPINGS_FILE)
+        if mappings_df.empty:
+            return {}
+    except pd.errors.EmptyDataError:
+        return {}
+    mapping_dict = {}
+    for _, row in mappings_df.iterrows():
+        key = (row['Clean_Description'], row['Bank_Category'])
+        mapping_dict[key] = row['Budget_Category']
+    return mapping_dict
+
+def apply_mapping_overlay(df, mappings_dict):
+    """Re-apply category mappings from CSV to override Budget_Category values."""
+    if not mappings_dict:
+        return df
+    df = df.copy()
+    for idx, row in df.iterrows():
+        key = (row['Clean_Description'], row['Category'])
+        if key in mappings_dict:
+            df.at[idx, 'Budget_Category'] = mappings_dict[key]
+    return df
+
 # --- Data Loading ---
 @st.cache_data
 def load_data():
@@ -103,6 +143,11 @@ def load_data():
     return df_trans, df_payments
 
 df_trans, df_payments = load_data()
+
+# Apply mapping overlay from external CSV (instant feedback without re-running Yearly_Spending.py)
+mappings_dict = load_mappings()
+if not df_trans.empty and mappings_dict:
+    df_trans = apply_mapping_overlay(df_trans, mappings_dict)
 
 if df_trans.empty:
     st.warning("No spending transactions found. Check your CSV generation script.")
@@ -179,8 +224,8 @@ with col4:
 st.markdown("---")
 
 # --- Tabs for different views ---
-tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy = st.tabs(
-    ["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting", "📈 Year Comparison"])
+tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy, tab_manage = st.tabs(
+    ["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting", "📈 Year Comparison", "⚙️ Manage Categories"])
 
 # TAB 1: OVERVIEW
 with tab_overview:
@@ -412,3 +457,110 @@ with tab_yoy:
                     pivot.style.format('${:,.2f}'),
                     use_container_width=True
                 )
+
+# TAB 6: MANAGE CATEGORIES
+with tab_manage:
+    st.subheader("Category Mapping Manager")
+    st.caption("Review and assign budget categories to merchants. "
+               "Merchants not in the mappings file are flagged as unreviewed.")
+
+    # Identify unreviewed merchants across ALL data (not just filtered)
+    all_combos = df_trans[['Clean_Description', 'Category']].drop_duplicates()
+    reviewed_keys = set(mappings_dict.keys())
+
+    unreviewed_mask = all_combos.apply(
+        lambda r: (r['Clean_Description'], r['Category']) not in reviewed_keys, axis=1
+    )
+    unreviewed_combos = all_combos[unreviewed_mask].copy()
+
+    # Enrich with transaction count and total spend
+    merchant_stats = df_trans.groupby(['Clean_Description', 'Category']).agg(
+        Transactions=('Net_Amount', 'count'),
+        Total_Amount=('Net_Amount', 'sum')
+    ).reset_index()
+
+    unreviewed_df = unreviewed_combos.merge(
+        merchant_stats, on=['Clean_Description', 'Category'], how='left'
+    ).sort_values('Total_Amount', ascending=False)
+
+    # Get current Budget_Category (from fallback logic in processed data)
+    current_cats = df_trans[['Clean_Description', 'Category', 'Budget_Category']].drop_duplicates(
+        subset=['Clean_Description', 'Category'], keep='first'
+    )
+    unreviewed_df = unreviewed_df.merge(
+        current_cats, on=['Clean_Description', 'Category'], how='left'
+    )
+    unreviewed_df['Budget_Category'] = unreviewed_df['Budget_Category'].fillna('Personal')
+
+    # Metrics
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1:
+        st.metric("Unreviewed Merchants", len(unreviewed_df))
+    with col_m2:
+        st.metric("Reviewed Mappings", len(reviewed_keys))
+    with col_m3:
+        st.metric("Total Unique Merchants", len(all_combos))
+
+    st.markdown("---")
+
+    if unreviewed_df.empty:
+        st.success("All merchants have been reviewed and mapped!")
+    else:
+        st.markdown("#### Unreviewed Merchants")
+        st.caption("Assign a budget category to each merchant, then click Save.")
+
+        edited_df = st.data_editor(
+            unreviewed_df.reset_index(drop=True),
+            column_config={
+                "Clean_Description": st.column_config.TextColumn("Merchant", disabled=True),
+                "Category": st.column_config.TextColumn("Bank Category", disabled=True),
+                "Transactions": st.column_config.NumberColumn("# Transactions", disabled=True),
+                "Total_Amount": st.column_config.NumberColumn("Total Spend", format="$%.2f", disabled=True),
+                "Budget_Category": st.column_config.SelectboxColumn(
+                    "Budget Category",
+                    options=sorted(BUDGET_CATEGORIES),
+                    required=True
+                ),
+            },
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            key="mapping_editor"
+        )
+
+        if st.button("Save Mappings", type="primary"):
+            new_rows = []
+            for _, row in edited_df.iterrows():
+                new_rows.append({
+                    'Clean_Description': row['Clean_Description'],
+                    'Bank_Category': row['Category'],
+                    'Budget_Category': row['Budget_Category']
+                })
+            new_mappings_df = pd.DataFrame(new_rows)
+
+            if MAPPINGS_FILE.exists():
+                existing_df = pd.read_csv(MAPPINGS_FILE)
+                combined_df = pd.concat([existing_df, new_mappings_df], ignore_index=True)
+                combined_df = combined_df.drop_duplicates(
+                    subset=['Clean_Description', 'Bank_Category'], keep='last'
+                )
+            else:
+                combined_df = new_mappings_df
+
+            combined_df.to_csv(MAPPINGS_FILE, index=False)
+            st.cache_data.clear()
+            st.rerun()
+
+    # Reference: show existing mappings
+    st.markdown("---")
+    st.markdown("#### Current Mapping Table")
+    if MAPPINGS_FILE.exists():
+        existing_mappings = pd.read_csv(MAPPINGS_FILE)
+        st.dataframe(
+            existing_mappings.sort_values('Clean_Description'),
+            use_container_width=True,
+            hide_index=True,
+            height=400
+        )
+    else:
+        st.info("No mappings file found. Run Yearly_Spending.py to create the initial mappings file.")

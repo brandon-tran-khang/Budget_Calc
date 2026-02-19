@@ -18,11 +18,22 @@ BUDGET_CATEGORIES = [
     "Pest control", "Landscaping", "Games", "Vacation", "Personal"
 ]
 
-# 2. The Mapping Dictionary
-# Key: (Clean Description, Original Bank Category)
-# Value: Your New Budget Category
-# Note: You can copy-paste the output from the console into here to update mappings.
-CATEGORY_MAP = CATEGORY_MAP = {
+MAPPINGS_FILE = BASE_DIR / "category_mappings.csv"
+
+# Bank category fallback — maps bank's original category to a reasonable budget default
+BANK_CATEGORY_FALLBACK = {
+    'Food & Drink': 'Restaurants',
+    'Vehicle Services': 'Gas',
+    'Health & Wellness': 'Health / Doctors',
+    'Groceries': 'Groceries',
+    'Home': 'Home Furniture',
+    'Travel': 'Vacation',
+    'Automotive': 'Car Maintenance',
+}
+
+# Legacy mapping dictionary — used ONLY to seed category_mappings.csv on first run.
+# To update mappings, edit category_mappings.csv directly or use the Streamlit UI.
+_SEED_CATEGORY_MAP = {
     ('Costco', 'Groceries'): 'Groceries',
     ('Costco', 'Merchandise'): 'Groceries',
     ('Costco', 'Shopping'): 'Groceries',
@@ -81,6 +92,36 @@ CATEGORY_MAP = CATEGORY_MAP = {
     ('Tous Les Jours Mesa', 'Food & Drink'): 'Groceries',
     ('Trader Joes', 'Groceries'): 'Groceries'
 }
+
+def load_category_mappings():
+    """
+    Load category mappings from external CSV file.
+    If the file doesn't exist, seed it from the legacy _SEED_CATEGORY_MAP.
+    Returns a dict of (Clean_Description, Bank_Category) -> Budget_Category.
+    """
+    if not MAPPINGS_FILE.exists():
+        rows = [
+            {'Clean_Description': desc, 'Bank_Category': bank_cat, 'Budget_Category': budget_cat}
+            for (desc, bank_cat), budget_cat in _SEED_CATEGORY_MAP.items()
+        ]
+        seed_df = pd.DataFrame(rows).drop_duplicates(
+            subset=['Clean_Description', 'Bank_Category'], keep='last'
+        )
+        seed_df.to_csv(MAPPINGS_FILE, index=False)
+        print(f"Created {MAPPINGS_FILE.name} with {len(seed_df)} mappings from defaults.")
+
+    try:
+        mappings_df = pd.read_csv(MAPPINGS_FILE)
+        if mappings_df.empty:
+            return {}
+    except pd.errors.EmptyDataError:
+        return {}
+
+    mapping_dict = {}
+    for _, row in mappings_df.iterrows():
+        key = (row['Clean_Description'], row['Bank_Category'])
+        mapping_dict[key] = row['Budget_Category']
+    return mapping_dict
 
 # --- Helper Functions ---
 
@@ -158,27 +199,46 @@ def load_and_combine_csv_files(directory):
     
     return pd.concat(all_transactions, ignore_index=True) if all_transactions else pd.DataFrame()
 
-def map_category(row):
+def map_category(row, category_map):
     """
-    Applies the custom category mapping. 
+    Applies category mapping with improved fallback logic.
     Priority:
-    1. Direct match in CATEGORY_MAP
-    2. Guess based on keywords
-    3. Default to 'Personal'
+    1. Exact match in category_map (loaded from CSV)
+    2. Bank category fallback
+    3. Special handling for Bills & Utilities
+    4. Keyword matching in description
+    5. Default to 'Personal'
     """
     key = (row['Clean_Description'], row['Category'])
-    
-    # 1. Check exact map
-    if key in CATEGORY_MAP:
-        return CATEGORY_MAP[key]
-    
-    # 2. Fallback Logic (Simple keyword matching if not mapped)
+
+    # 1. Exact match from external mapping file
+    if key in category_map:
+        return category_map[key]
+
+    # 2. Bank category fallback
+    bank_cat = row['Category']
     desc_lower = row['Clean_Description'].lower()
-    
-    if 'gas' in desc_lower or 'fuel' in desc_lower: return 'Gas'
-    if 'food' in desc_lower or 'restaurant' in desc_lower: return 'Restaurants'
-    
-    # 3. Default
+    if bank_cat in BANK_CATEGORY_FALLBACK:
+        return BANK_CATEGORY_FALLBACK[bank_cat]
+
+    # 3. Special handling for Bills & Utilities
+    if bank_cat == 'Bills & Utilities':
+        if any(kw in desc_lower for kw in ['electric', 'srp', 'power']):
+            return 'Home Electricity'
+        if any(kw in desc_lower for kw in ['water', 'trash', 'sewer', 'city of']):
+            return 'Home Water/Trash'
+        if any(kw in desc_lower for kw in ['internet', 'cox', 'wifi']):
+            return 'Internet'
+        if any(kw in desc_lower for kw in ['phone', 'verizon', 'mobile', 't-mobile']):
+            return 'Phone Bill'
+
+    # 4. Generic keyword fallback
+    if 'gas' in desc_lower or 'fuel' in desc_lower:
+        return 'Gas'
+    if 'food' in desc_lower or 'restaurant' in desc_lower:
+        return 'Restaurants'
+
+    # 5. Default
     return 'Personal'
 
 def main():
@@ -232,8 +292,13 @@ def main():
     # Keep only positive spending (money leaving account)
     df_spending = df_spending[df_spending['Net_Amount'] > 0].copy()
     
+    # Load category mappings from external CSV (seeds on first run)
+    category_map = load_category_mappings()
+
     # Apply the map
-    df_spending['Budget_Category'] = df_spending.apply(map_category, axis=1)
+    df_spending['Budget_Category'] = df_spending.apply(
+        lambda row: map_category(row, category_map), axis=1
+    )
 
     # 4. Export
     output_cols = ['Transaction Date', 'Clean_Description', 'Category', 'Budget_Category', 'Net_Amount', 'Source', 'Month', 'Quarter', 'Week']
@@ -252,20 +317,12 @@ def main():
     print(f"✓ Total Spending: ${df_spending['Net_Amount'].sum():,.2f}")
     print("-" * 30)
     
-    # 5. Generate Mapping Helper
-    # This prints a python-ready dictionary of all combinations found in your data
-    # that you can copy-paste back into CATEGORY_MAP to fix "Personal" defaults.
-    
-    print("\n[MAPPING HELPER] Found these unique combinations:")
-    print("Copy/Paste lines from below into 'CATEGORY_MAP' to recategorize:\n")
-    
-    unique_combos = df_spending[['Clean_Description', 'Category', 'Budget_Category']].drop_duplicates().sort_values('Clean_Description')
-    
-    print("CATEGORY_MAP.update({")
-    for _, row in unique_combos.iterrows():
-        # Only print ones that might need attention (optional filter)
-        print(f"    ('{row['Clean_Description']}', '{row['Category']}'): '{row['Budget_Category']}',")
-    print("})")
+    # Count unmapped merchants for user awareness
+    unmapped = df_spending[df_spending['Budget_Category'] == 'Personal']
+    unmapped_merchants = unmapped[['Clean_Description', 'Category']].drop_duplicates()
+    if not unmapped_merchants.empty:
+        print(f"\n{len(unmapped_merchants)} merchant(s) defaulted to 'Personal'.")
+        print("Use the 'Manage Categories' tab in the dashboard to review and assign them.")
 
 if __name__ == "__main__":
     main()

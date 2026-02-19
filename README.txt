@@ -57,14 +57,16 @@ The system uses 24 predefined categories:
   Restaurants, Health/Doctors, Car Maintenance, Pest Control, Landscaping,
   Games, Vacation, Personal
 
-Transactions are mapped via the CATEGORY_MAP dictionary in Yearly_Spending.py.
-Unmapped transactions default to "Personal". The script prints a mapping helper
-after processing to assist with categorizing new merchants.
+Transactions are mapped via category_mappings.csv (auto-created on first run).
+Unmapped transactions default to "Personal" but can be assigned via the
+"Manage Categories" tab in the dashboard. The dashboard writes changes back
+to the CSV file, so no source code editing is needed to update mappings.
 
 Project Structure
 ------------------
   Budget_Calc/
-  ├── frontend.py           Streamlit dashboard
-  ├── Yearly_Spending.py    Data processing pipeline
-  ├── Data/                 Bank CSVs and processed output (git-ignored)
-  └── README.txt            This file
+  ├── frontend.py              Streamlit dashboard
+  ├── Yearly_Spending.py       Data processing pipeline
+  ├── category_mappings.csv    Merchant-to-category mappings (auto-created)
+  ├── Data/                    Bank CSVs and processed output (git-ignored)
+  └── README.txt               This file
