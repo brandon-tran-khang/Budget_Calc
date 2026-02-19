@@ -4,10 +4,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
 import datetime
+import calendar
 
 # --- Page Configuration (Must be first) ---
 st.set_page_config(
-    page_title="2026 Finance Dashboard", 
+    page_title="Finance Dashboard",
     page_icon="💳", 
     layout="wide", 
     initial_sidebar_state="collapsed"
@@ -75,27 +76,30 @@ st.markdown("""
 # --- Data Loading ---
 @st.cache_data
 def load_data():
-    # Update path to your specific directory
-    directory = Path("/Users/brandontran/Desktop/Code/Budget_Calc/Data")
-    
+    directory = Path(__file__).resolve().parent / "Data"
+
     df_trans = pd.DataFrame()
     df_payments = pd.DataFrame()
-    
+
     try:
-        # Load the detailed SPENDING log
-        df_trans = pd.read_csv(directory / "2026_All_Transactions.csv")
-        df_trans['Transaction Date'] = pd.to_datetime(df_trans['Transaction Date'])
-        
-        # Try Loading Payments (if it exists)
-        payments_path = directory / "2026_Credit_Card_Payments.csv"
+        trans_path = directory / "all_transactions.csv"
+        if trans_path.exists():
+            df_trans = pd.read_csv(trans_path)
+            df_trans['Transaction Date'] = pd.to_datetime(df_trans['Transaction Date'])
+            if 'Year' not in df_trans.columns:
+                df_trans['Year'] = df_trans['Transaction Date'].dt.year
+
+        payments_path = directory / "all_credit_card_payments.csv"
         if payments_path.exists():
             df_payments = pd.read_csv(payments_path)
             df_payments['Transaction Date'] = pd.to_datetime(df_payments['Transaction Date'])
-            
+            if 'Year' not in df_payments.columns:
+                df_payments['Year'] = df_payments['Transaction Date'].dt.year
+
     except FileNotFoundError:
         st.error("Data files not found. Please run 'Yearly_Spending.py' first.")
         return pd.DataFrame(), pd.DataFrame()
-        
+
     return df_trans, df_payments
 
 df_trans, df_payments = load_data()
@@ -107,29 +111,37 @@ if df_trans.empty:
 # --- Sidebar Filters ---
 with st.sidebar:
     st.header("Filters")
-    
-    # Month Filter
-    months = ['All'] + sorted(df_trans['Month'].unique().tolist(), key=lambda m: datetime.datetime.strptime(m, "%B").month)
+
+    # Year Filter
+    available_years = sorted(df_trans['Year'].unique().tolist(), reverse=True)
+    current_year = datetime.date.today().year
+    default_year_index = available_years.index(current_year) if current_year in available_years else 0
+    selected_year = st.selectbox("Select Year", available_years, index=default_year_index)
+
+    # Filter by year first to scope month/category options
+    df_year = df_trans[df_trans['Year'] == selected_year].copy()
+
+    # Month Filter (scoped to selected year)
+    months = ['All'] + sorted(df_year['Month'].unique().tolist(), key=lambda m: datetime.datetime.strptime(m, "%B").month)
     selected_month = st.selectbox("Select Month", months)
-    
-    # UPDATED: Category Filter to use Budget_Category
-    categories = ['All'] + sorted(df_trans['Budget_Category'].unique().tolist())
+
+    # Category Filter (scoped to selected year)
+    categories = ['All'] + sorted(df_year['Budget_Category'].unique().tolist())
     selected_category = st.selectbox("Select Budget Category", categories)
 
     st.markdown("---")
     st.caption(f"Last Updated: {datetime.date.today()}")
 
-# Apply Filters
-df_filtered = df_trans.copy()
+# Apply Filters (starting from year-filtered data)
+df_filtered = df_year.copy()
 if selected_month != 'All':
     df_filtered = df_filtered[df_filtered['Month'] == selected_month]
-# UPDATED: Filter logic for Budget_Category
 if selected_category != 'All':
     df_filtered = df_filtered[df_filtered['Budget_Category'] == selected_category]
 
 # --- Main Dashboard ---
 
-st.title("💸 2026 Spending Command Center")
+st.title(f"💸 {selected_year} Spending Command Center")
 st.markdown("Taking control of personal finances, one data point at a time.")
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -142,12 +154,10 @@ avg_tx = df_filtered['Net_Amount'].mean() if tx_count > 0 else 0
 
 # Calculate Payment Total for display (Separated)
 total_payments_made = 0
-if not df_payments.empty:
-    # Use the filtered month if selected, otherwise total
-    pay_view = df_payments.copy()
+if not df_payments.empty and 'Year' in df_payments.columns:
+    pay_view = df_payments[df_payments['Year'] == selected_year].copy()
     if selected_month != 'All':
         pay_view = pay_view[pay_view['Month'] == selected_month]
-    # In raw CSV payments are positive
     total_payments_made = pay_view['Amount'].sum()
 
 with col1:
@@ -169,10 +179,11 @@ with col4:
 st.markdown("---")
 
 # --- Tabs for different views ---
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting"])
+tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy = st.tabs(
+    ["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting", "📈 Year Comparison"])
 
 # TAB 1: OVERVIEW
-with tab1:
+with tab_overview:
     col_chart1, col_chart2 = st.columns([2, 1])
     
     with col_chart1:
@@ -199,7 +210,7 @@ with tab1:
         st.plotly_chart(fig_pie, use_container_width=True)
 
 # TAB 2: VENDOR ANALYSIS (No changes needed, uses merchant name)
-with tab2:
+with tab_vendor:
     st.subheader("Where does the money actually go?")
     col_v1, col_v2 = st.columns([2, 1])
     with col_v1:
@@ -219,7 +230,7 @@ with tab2:
         st.table(freq_merchants)
 
 # TAB 3: TRANSACTION DATA
-with tab3:
+with tab_transactions:
     st.subheader("Detailed Transaction Log")
     
     # UPDATED: Table now displays Budget_Category instead of bank Category
@@ -241,36 +252,163 @@ with tab3:
         hide_index=True
     )
 
-# TAB 4: FORECASTING (No changes needed, uses dates and total Net_Amount)
-with tab4:
-    st.subheader("End of Year Projection")
-    current_date = datetime.date.today()
-    start_date = datetime.date(2026, 1, 1)
-    days_passed = (current_date - start_date).days
-    if days_passed < 1: days_passed = 1
-    
-    total_spend_ytd = df_trans['Net_Amount'].sum()
-    daily_avg = total_spend_ytd / days_passed
-    projected_total = daily_avg * 365
-    
+# TAB 4: FORECASTING
+with tab_forecast:
+    is_current_year = (selected_year == datetime.date.today().year)
+    days_in_year = 366 if calendar.isleap(selected_year) else 365
+
+    if is_current_year:
+        st.subheader("End of Year Projection")
+        current_date = datetime.date.today()
+        start_date = datetime.date(selected_year, 1, 1)
+        days_passed = (current_date - start_date).days
+        if days_passed < 1:
+            days_passed = 1
+
+        total_spend_ytd = df_year['Net_Amount'].sum()
+        daily_avg = total_spend_ytd / days_passed
+        projected_total = daily_avg * days_in_year
+    else:
+        st.subheader(f"{selected_year} Year in Review")
+        total_spend_ytd = df_year['Net_Amount'].sum()
+        days_with_data = (df_year['Transaction Date'].max() - df_year['Transaction Date'].min()).days
+        if days_with_data < 1:
+            days_with_data = 1
+        daily_avg = total_spend_ytd / days_with_data
+        projected_total = total_spend_ytd
+
     col_f1, col_f2 = st.columns(2)
     with col_f1:
-        st.metric("Current Daily Burn Rate", f"${daily_avg:,.2f} / day")
+        label = "Current Daily Burn Rate" if is_current_year else "Average Daily Spend"
+        st.metric(label, f"${daily_avg:,.2f} / day")
     with col_f2:
-        st.metric("Projected 2026 Total", f"${projected_total:,.2f}", 
-                  help="Assumes you keep spending at exactly this rate for the rest of the year.")
-        
-    dates = pd.date_range(start='2026-01-01', end='2026-12-31', freq='M')
-    projection_values = [daily_avg * d.day_of_year for d in dates]
-    
+        label = f"Projected {selected_year} Total" if is_current_year else f"{selected_year} Total Spend"
+        help_text = ("Assumes you keep spending at exactly this rate for the rest of the year."
+                     if is_current_year else "Final total for this completed year.")
+        st.metric(label, f"${projected_total:,.2f}", help=help_text)
+
+    year_start = f'{selected_year}-01-01'
+    year_end = f'{selected_year}-12-31'
+    dates = pd.date_range(start=year_start, end=year_end, freq='M')
+
     fig_proj = go.Figure()
-    fig_proj.add_trace(go.Scatter(x=dates, y=projection_values, mode='lines', name='Projection', line=dict(dash='dot', color='gray')))
-    
-    actual_cum = df_trans.sort_values('Transaction Date').set_index('Transaction Date')['Net_Amount'].cumsum()
+
+    if is_current_year:
+        projection_values = [daily_avg * d.day_of_year for d in dates]
+        fig_proj.add_trace(go.Scatter(
+            x=dates, y=projection_values, mode='lines',
+            name='Projection', line=dict(dash='dot', color='gray')))
+
+    actual_cum = df_year.sort_values('Transaction Date').set_index('Transaction Date')['Net_Amount'].cumsum()
     actual_cum_resampled = actual_cum.resample('M').last()
-    
-    fig_proj.add_trace(go.Scatter(x=actual_cum_resampled.index, y=actual_cum_resampled.values, 
-                                  mode='lines+markers', name='Actual Spending', line=dict(color='#3B82F6', width=4)))
-    
-    fig_proj.update_layout(title="Actual Cumulative Spend vs. Projected Path", template="plotly_white", hovermode="x unified")
+
+    fig_proj.add_trace(go.Scatter(
+        x=actual_cum_resampled.index, y=actual_cum_resampled.values,
+        mode='lines+markers', name='Actual Spending',
+        line=dict(color='#3B82F6', width=4)))
+
+    title = "Actual Cumulative Spend vs. Projected Path" if is_current_year else f"Cumulative Spend for {selected_year}"
+    fig_proj.update_layout(title=title, template="plotly_white", hovermode="x unified")
     st.plotly_chart(fig_proj, use_container_width=True)
+
+# TAB 5: YEAR-OVER-YEAR COMPARISON
+with tab_yoy:
+    available_years_list = sorted(df_trans['Year'].unique().tolist())
+
+    if len(available_years_list) < 2:
+        st.info("Year-over-year comparison requires at least 2 years of data. "
+                "Keep adding transaction CSVs from different years to unlock this view.")
+    else:
+        st.subheader("Year-over-Year Spending Comparison")
+
+        compare_years = st.multiselect(
+            "Select years to compare",
+            available_years_list,
+            default=available_years_list[-2:]
+        )
+
+        if len(compare_years) < 2:
+            st.warning("Please select at least 2 years to compare.")
+        else:
+            df_compare = df_trans[df_trans['Year'].isin(compare_years)].copy()
+            df_compare['Month_Num'] = df_compare['Transaction Date'].dt.month
+            df_compare['Month_Name'] = df_compare['Transaction Date'].dt.strftime('%b')
+            # Convert Year to string for chart legends
+            compare_years_str = [str(y) for y in sorted(compare_years)]
+            df_compare['Year'] = df_compare['Year'].astype(str)
+
+            # Chart 1: Monthly Spending Overlay
+            st.markdown("#### Monthly Spending by Year")
+            monthly = df_compare.groupby(['Year', 'Month_Num', 'Month_Name'])['Net_Amount'].sum().reset_index()
+            monthly = monthly.sort_values('Month_Num')
+
+            fig_monthly = px.line(
+                monthly, x='Month_Name', y='Net_Amount', color='Year',
+                markers=True, labels={'Net_Amount': 'Total Spend ($)', 'Month_Name': 'Month'},
+                color_discrete_sequence=px.colors.qualitative.Set2
+            )
+            fig_monthly.update_layout(template="plotly_white", hovermode="x unified")
+            st.plotly_chart(fig_monthly, use_container_width=True)
+
+            # Chart 2: Category Comparison (Grouped Bar)
+            st.markdown("#### Spending by Category per Year")
+            cat_compare = df_compare.groupby(['Year', 'Budget_Category'])['Net_Amount'].sum().reset_index()
+
+            fig_cat = px.bar(
+                cat_compare, x='Budget_Category', y='Net_Amount', color='Year',
+                barmode='group', labels={'Net_Amount': 'Total ($)', 'Budget_Category': 'Category'},
+                color_discrete_sequence=px.colors.qualitative.Set2
+            )
+            fig_cat.update_layout(template="plotly_white", xaxis_tickangle=-45)
+            st.plotly_chart(fig_cat, use_container_width=True)
+
+            # Chart 3: Cumulative Spending Curves
+            st.markdown("#### Cumulative Spending Through the Year")
+            fig_cum = go.Figure()
+            for year_str in compare_years_str:
+                yr_data = df_compare[df_compare['Year'] == year_str].sort_values('Transaction Date').copy()
+                yr_data['DayOfYear'] = yr_data['Transaction Date'].dt.dayofyear
+                yr_data['Cumulative'] = yr_data['Net_Amount'].cumsum()
+                fig_cum.add_trace(go.Scatter(
+                    x=yr_data['DayOfYear'], y=yr_data['Cumulative'],
+                    mode='lines', name=year_str, line=dict(width=3)
+                ))
+            fig_cum.update_layout(
+                template="plotly_white",
+                xaxis_title="Day of Year", yaxis_title="Cumulative Spend ($)",
+                hovermode="x unified"
+            )
+            st.plotly_chart(fig_cum, use_container_width=True)
+
+            # Table: YoY Change by Category
+            st.markdown("#### Year-over-Year Change by Category")
+            if len(compare_years_str) == 2:
+                yr_old, yr_new = compare_years_str
+                old_cats = df_compare[df_compare['Year'] == yr_old].groupby('Budget_Category')['Net_Amount'].sum()
+                new_cats = df_compare[df_compare['Year'] == yr_new].groupby('Budget_Category')['Net_Amount'].sum()
+
+                change_df = pd.DataFrame({
+                    f'{yr_old} Total': old_cats,
+                    f'{yr_new} Total': new_cats
+                }).fillna(0)
+                change_df['Change ($)'] = change_df[f'{yr_new} Total'] - change_df[f'{yr_old} Total']
+                change_df['Change (%)'] = (
+                    (change_df['Change ($)'] / change_df[f'{yr_old} Total'].replace(0, float('nan'))) * 100
+                ).round(1)
+                change_df = change_df.sort_values('Change ($)', ascending=False)
+
+                st.dataframe(
+                    change_df.style.format({
+                        f'{yr_old} Total': '${:,.2f}',
+                        f'{yr_new} Total': '${:,.2f}',
+                        'Change ($)': '${:+,.2f}',
+                        'Change (%)': '{:+.1f}%'
+                    }),
+                    use_container_width=True
+                )
+            else:
+                pivot = df_compare.groupby(['Budget_Category', 'Year'])['Net_Amount'].sum().unstack(fill_value=0)
+                st.dataframe(
+                    pivot.style.format('${:,.2f}'),
+                    use_container_width=True
+                )
