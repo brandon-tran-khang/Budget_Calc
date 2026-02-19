@@ -25,6 +25,9 @@ What It Does
     * Full searchable transaction log
     * Year-end spending projection (current year) or year-in-review (past years)
     * Year-over-year comparison charts and tables
+    * Recurring expense detection and subscription tracking
+    * Fixed vs. variable spending breakdown
+    * Subscription change alerts (new, cancelled, price changes)
 
 Requirements
 -------------
@@ -67,6 +70,7 @@ Project Structure
   Budget_Calc/
   ├── frontend.py              Streamlit dashboard
   ├── Yearly_Spending.py       Data processing pipeline
+  ├── recurring.py             Recurring expense detection logic
   ├── category_mappings.csv    Merchant-to-category mappings (auto-created)
   ├── Data/                    Bank CSVs and processed output (git-ignored)
   └── README.txt               This file

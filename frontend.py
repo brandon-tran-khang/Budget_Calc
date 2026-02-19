@@ -5,6 +5,7 @@ import plotly.express as px
 from pathlib import Path
 import datetime
 import calendar
+from recurring import detect_recurring_merchants, classify_transactions, detect_subscription_changes
 
 # --- Page Configuration (Must be first) ---
 st.set_page_config(
@@ -102,6 +103,15 @@ def load_mappings():
         mapping_dict[key] = row['Budget_Category']
     return mapping_dict
 
+@st.cache_data
+def get_recurring_analysis(_df_dict):
+    """Cached recurring detection to avoid recomputing on every rerender."""
+    df = pd.DataFrame(_df_dict)
+    df['Transaction Date'] = pd.to_datetime(df['Transaction Date'])
+    recurring_df = detect_recurring_merchants(df)
+    alerts = detect_subscription_changes(df)
+    return recurring_df.to_dict('list'), alerts
+
 def apply_mapping_overlay(df, mappings_dict):
     """Re-apply category mappings from CSV to override Budget_Category values."""
     if not mappings_dict:
@@ -166,6 +176,11 @@ with st.sidebar:
     # Filter by year first to scope month/category options
     df_year = df_trans[df_trans['Year'] == selected_year].copy()
 
+    # Recurring expense detection for selected year
+    _recurring_dict, subscription_alerts = get_recurring_analysis(df_year.to_dict('list'))
+    recurring_merchants = pd.DataFrame(_recurring_dict)
+    df_year = classify_transactions(df_year, recurring_merchants)
+
     # Month Filter (scoped to selected year)
     months = ['All'] + sorted(df_year['Month'].unique().tolist(), key=lambda m: datetime.datetime.strptime(m, "%B").month)
     selected_month = st.selectbox("Select Month", months)
@@ -224,8 +239,8 @@ with col4:
 st.markdown("---")
 
 # --- Tabs for different views ---
-tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy, tab_manage = st.tabs(
-    ["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting", "📈 Year Comparison", "⚙️ Manage Categories"])
+tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy, tab_recurring, tab_manage = st.tabs(
+    ["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting", "📈 Year Comparison", "🔄 Recurring", "⚙️ Manage Categories"])
 
 # TAB 1: OVERVIEW
 with tab_overview:
@@ -253,6 +268,58 @@ with tab_overview:
         
         fig_pie.update_layout(height=350, showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
+
+    # Fixed vs. Variable Spending Breakdown
+    if 'spending_type' in df_filtered.columns:
+        st.markdown("---")
+        st.subheader("Fixed vs. Variable Spending")
+
+        fixed_total = df_filtered[df_filtered['spending_type'] == 'Fixed']['Net_Amount'].sum()
+        variable_total = df_filtered[df_filtered['spending_type'] == 'Variable']['Net_Amount'].sum()
+        total_fv = fixed_total + variable_total
+        fixed_pct = (fixed_total / total_fv * 100) if total_fv > 0 else 0
+        variable_pct = (variable_total / total_fv * 100) if total_fv > 0 else 0
+
+        col_fv1, col_fv2, col_fv3 = st.columns([1, 1, 1])
+        with col_fv1:
+            st.metric("Fixed / Recurring", f"${fixed_total:,.2f}", f"{fixed_pct:.1f}% of total")
+        with col_fv2:
+            st.metric("Variable / Discretionary", f"${variable_total:,.2f}", f"{variable_pct:.1f}% of total")
+        with col_fv3:
+            fv_data = pd.DataFrame({
+                'Type': ['Fixed', 'Variable'],
+                'Amount': [fixed_total, variable_total]
+            })
+            fig_fv = px.pie(fv_data, values='Amount', names='Type', hole=0.65,
+                            color='Type',
+                            color_discrete_map={'Fixed': '#EF4444', 'Variable': '#3B82F6'})
+            fig_fv.update_layout(height=200, showlegend=True,
+                                 margin=dict(t=0, b=0, l=10, r=10))
+            st.plotly_chart(fig_fv, use_container_width=True)
+
+        # Stacked bar: Fixed vs Variable per month
+        df_fv = df_filtered.copy()
+        df_fv['month_num'] = df_fv['Transaction Date'].dt.month
+        month_fv = df_fv.groupby(['month_num', 'spending_type'])['Net_Amount'].sum().reset_index()
+        month_names_map = {
+            1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+            7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+        }
+        month_fv['Month'] = month_fv['month_num'].map(month_names_map)
+        month_fv = month_fv.sort_values('month_num')
+
+        fig_stacked = px.bar(
+            month_fv, x='Month', y='Net_Amount', color='spending_type',
+            barmode='stack',
+            labels={'Net_Amount': 'Amount ($)', 'spending_type': 'Type'},
+            color_discrete_map={'Fixed': '#EF4444', 'Variable': '#3B82F6'}
+        )
+        fig_stacked.update_layout(
+            title="Monthly Spending: Fixed vs. Variable",
+            template="plotly_white", height=350,
+            legend_title_text=""
+        )
+        st.plotly_chart(fig_stacked, use_container_width=True)
 
 # TAB 2: VENDOR ANALYSIS (No changes needed, uses merchant name)
 with tab_vendor:
@@ -458,7 +525,105 @@ with tab_yoy:
                     use_container_width=True
                 )
 
-# TAB 6: MANAGE CATEGORIES
+# TAB 6: RECURRING EXPENSES
+with tab_recurring:
+    st.subheader("Recurring Expenses & Subscriptions")
+    st.caption("Auto-detected charges that appear monthly with consistent amounts.")
+
+    if recurring_merchants.empty:
+        st.info("No recurring expenses detected. This feature needs at least 2 consecutive months "
+                "of data from the same merchant with consistent amounts.")
+    else:
+        # Summary Metrics
+        total_monthly_fixed = recurring_merchants['Monthly_Amount'].sum()
+        total_annual_fixed = recurring_merchants['Annual_Projected'].sum()
+        total_year_spend = df_year['Net_Amount'].sum()
+        recurring_actual = df_year[df_year['is_recurring']]['Net_Amount'].sum()
+        recurring_pct = (recurring_actual / total_year_spend * 100) if total_year_spend > 0 else 0
+
+        col_r1, col_r2, col_r3 = st.columns(3)
+        with col_r1:
+            st.metric("Monthly Fixed Costs", f"${total_monthly_fixed:,.2f}")
+        with col_r2:
+            st.metric("Annual Fixed Costs", f"${total_annual_fixed:,.2f}")
+        with col_r3:
+            st.metric("% of Spending (Recurring)", f"{recurring_pct:.1f}%")
+
+        st.markdown("---")
+
+        # Subscription Change Alerts
+        if subscription_alerts:
+            st.markdown("#### Subscription Changes Detected")
+            for alert in subscription_alerts:
+                if alert['type'] == 'new':
+                    st.success(f"**{alert['merchant']}** — {alert['detail']}")
+                elif alert['type'] == 'cancelled':
+                    st.warning(f"**{alert['merchant']}** — {alert['detail']}")
+                elif alert['type'] == 'price_increase':
+                    st.error(f"**{alert['merchant']}** — {alert['detail']}")
+                elif alert['type'] == 'price_decrease':
+                    st.info(f"**{alert['merchant']}** — {alert['detail']}")
+            st.markdown("---")
+
+        # Main Content: Table + Chart
+        col_rt1, col_rt2 = st.columns([2, 1])
+
+        with col_rt1:
+            st.markdown("#### All Recurring Charges")
+            display_df = recurring_merchants[[
+                'Clean_Description', 'Monthly_Amount', 'Budget_Category',
+                'Months_Active', 'Active_Range', 'Annual_Projected'
+            ]].sort_values('Annual_Projected', ascending=False)
+
+            st.dataframe(
+                display_df,
+                column_config={
+                    "Clean_Description": st.column_config.TextColumn("Merchant"),
+                    "Monthly_Amount": st.column_config.NumberColumn("Monthly", format="$%.2f"),
+                    "Budget_Category": st.column_config.TextColumn("Category"),
+                    "Months_Active": st.column_config.NumberColumn("Months"),
+                    "Active_Range": st.column_config.TextColumn("Active Months"),
+                    "Annual_Projected": st.column_config.NumberColumn("Annual Cost", format="$%.2f"),
+                },
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
+
+        with col_rt2:
+            st.markdown("#### Recurring by Category")
+            cat_recurring = recurring_merchants.groupby('Budget_Category')['Monthly_Amount'].sum().reset_index()
+            fig_rec_pie = px.pie(
+                cat_recurring, values='Monthly_Amount', names='Budget_Category',
+                hole=0.6, color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            fig_rec_pie.update_layout(
+                height=350, showlegend=True,
+                margin=dict(t=0, b=0, l=0, r=0)
+            )
+            st.plotly_chart(fig_rec_pie, use_container_width=True)
+
+        # Monthly Recurring Spend Trend
+        st.markdown("#### Monthly Recurring Spend")
+        recurring_tx = df_year[df_year['is_recurring']].copy()
+        if not recurring_tx.empty:
+            month_names_map = {
+                1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+                7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+            }
+            recurring_tx['month_num'] = recurring_tx['Transaction Date'].dt.month
+            monthly_recurring = recurring_tx.groupby('month_num')['Net_Amount'].sum().reset_index()
+            monthly_recurring['Month_Name'] = monthly_recurring['month_num'].map(month_names_map)
+
+            fig_rec_trend = px.bar(
+                monthly_recurring, x='Month_Name', y='Net_Amount',
+                labels={'Net_Amount': 'Recurring Spend ($)', 'Month_Name': 'Month'},
+                color_discrete_sequence=['#6366f1']
+            )
+            fig_rec_trend.update_layout(template="plotly_white", height=300)
+            st.plotly_chart(fig_rec_trend, use_container_width=True)
+
+# TAB 7: MANAGE CATEGORIES
 with tab_manage:
     st.subheader("Category Mapping Manager")
     st.caption("Review and assign budget categories to merchants. "
