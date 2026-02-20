@@ -2,17 +2,20 @@ Budget_Calc - Personal Finance Tracker
 =======================================
 
 A personal finance tracking tool that consolidates credit card transactions
-from multiple banks (Chase and Citi), automatically categorizes spending into
-custom budget categories, and provides an interactive web dashboard for
+from multiple banks (Chase and Citi) and checking account transactions,
+automatically categorizes spending into custom budget categories, tracks
+income and cash flow, and provides an interactive web dashboard for
 analyzing spending habits.
 
 What It Does
 -------------
 - Imports raw CSV transaction exports from Chase and Citi credit cards
+- Imports Chase checking account CSVs for income and debit spending tracking
 - Normalizes different bank formats into a unified dataset
 - Cleans up merchant descriptions (removes payment processor codes, normalizes names)
 - Maps transactions to 24 custom budget categories (Groceries, Gas, Restaurants, etc.)
 - Filters out credit card payments to avoid double-counting
+- Classifies checking transactions as income, expense, or transfer
 - Generates weekly and quarterly spending summaries
 - Supports multiple years of data with automatic year detection
 - Displays an interactive Streamlit dashboard with:
@@ -28,6 +31,9 @@ What It Does
     * Recurring expense detection and subscription tracking
     * Fixed vs. variable spending breakdown
     * Subscription change alerts (new, cancelled, price changes)
+    * Income & cash flow analysis (income vs expenses, savings rate)
+    * Income breakdown by source (payroll, deposits, ACH credits)
+    * Debit vs credit card spending comparison
 
 Requirements
 -------------
@@ -41,7 +47,9 @@ Setup
 1. Install dependencies:
        pip install pandas streamlit plotly
 
-2. Export transaction CSVs from your bank accounts and place them in the Data/ folder.
+2. Export transaction CSVs from your bank accounts:
+   - Credit card CSVs (Chase/Citi) go in the Data/ folder
+   - Checking account CSVs (Chase) go in the Data/Checking/ folder
    CSVs from any year will be processed automatically.
 
 3. Run the data processing script:
@@ -73,4 +81,7 @@ Project Structure
   ├── recurring.py             Recurring expense detection logic
   ├── category_mappings.csv    Merchant-to-category mappings (auto-created)
   ├── Data/                    Bank CSVs and processed output (git-ignored)
+  │   └── Checking/            Chase checking account CSVs (git-ignored)
+  ├── improvements/            Improvement proposals
+  ├── CLAUDE.md                Project context for Claude Code
   └── README.txt               This file

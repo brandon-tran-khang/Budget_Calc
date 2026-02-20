@@ -10,8 +10,8 @@ from recurring import detect_recurring_merchants, classify_transactions, detect_
 # --- Page Configuration (Must be first) ---
 st.set_page_config(
     page_title="Finance Dashboard",
-    page_icon="💳", 
-    layout="wide", 
+    page_icon="💳",
+    layout="wide",
     initial_sidebar_state="collapsed"
 )
 
@@ -22,7 +22,7 @@ st.markdown("""
     html, body, [class*="css"] {
         font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
     }
-    
+
     /* Metrics Cards */
     div[data-testid="stMetric"] {
         background-color: #FFFFFF;
@@ -31,29 +31,29 @@ st.markdown("""
         border-radius: 10px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.02);
     }
-    
+
     /* Change metric label text to black */
     div[data-testid="stMetric"] label {
         color: #000000 !important;
         font-weight: 600;
     }
-    
+
     /* Change metric value text to black */
     div[data-testid="stMetric"] div {
         color: #000000 !important;
     }
-    
+
     /* Remove default top padding */
     .block-container {
         padding-top: 2rem;
     }
-    
+
     /* Headers */
     h1, h2, h3 {
         color: #1E293B;
         font-weight: 700;
     }
-    
+
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 20px;
@@ -152,7 +152,41 @@ def load_data():
 
     return df_trans, df_payments
 
+@st.cache_data
+def load_income_data():
+    """Load combined income data from all_income.csv."""
+    directory = Path(__file__).resolve().parent / "Data"
+    income_path = directory / "all_income.csv"
+    if not income_path.exists():
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(income_path)
+        df['Transaction Date'] = pd.to_datetime(df['Transaction Date'])
+        if 'Year' not in df.columns:
+            df['Year'] = df['Transaction Date'].dt.year
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+@st.cache_data
+def load_checking_spending():
+    """Load combined checking spending data from all_checking_spending.csv."""
+    directory = Path(__file__).resolve().parent / "Data"
+    checking_path = directory / "all_checking_spending.csv"
+    if not checking_path.exists():
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(checking_path)
+        df['Transaction Date'] = pd.to_datetime(df['Transaction Date'])
+        if 'Year' not in df.columns:
+            df['Year'] = df['Transaction Date'].dt.year
+        return df
+    except Exception:
+        return pd.DataFrame()
+
 df_trans, df_payments = load_data()
+df_income = load_income_data()
+df_checking = load_checking_spending()
 
 # Apply mapping overlay from external CSV (instant feedback without re-running Yearly_Spending.py)
 mappings_dict = load_mappings()
@@ -176,10 +210,25 @@ with st.sidebar:
     # Filter by year first to scope month/category options
     df_year = df_trans[df_trans['Year'] == selected_year].copy()
 
-    # Recurring expense detection for selected year
-    _recurring_dict, subscription_alerts = get_recurring_analysis(df_year.to_dict('list'))
+    # Filter income and checking by year
+    df_income_year = df_income[df_income['Year'] == selected_year].copy() if not df_income.empty else pd.DataFrame()
+    df_checking_year = df_checking[df_checking['Year'] == selected_year].copy() if not df_checking.empty else pd.DataFrame()
+
+    # Recurring expense detection — combine credit + checking for broader detection
+    df_for_recurring = df_year.copy()
+    if not df_checking_year.empty:
+        # Ensure checking data has Budget_Category for recurring detection
+        checking_for_recurring = df_checking_year.copy()
+        if 'Budget_Category' not in checking_for_recurring.columns:
+            checking_for_recurring['Budget_Category'] = 'Personal'
+        common_cols = [c for c in df_for_recurring.columns if c in checking_for_recurring.columns]
+        df_for_recurring = pd.concat([df_for_recurring[common_cols], checking_for_recurring[common_cols]], ignore_index=True)
+
+    _recurring_dict, subscription_alerts = get_recurring_analysis(df_for_recurring.to_dict('list'))
     recurring_merchants = pd.DataFrame(_recurring_dict)
     df_year = classify_transactions(df_year, recurring_merchants)
+    if not df_checking_year.empty:
+        df_checking_year = classify_transactions(df_checking_year, recurring_merchants)
 
     # Month Filter (scoped to selected year)
     months = ['All'] + sorted(df_year['Month'].unique().tolist(), key=lambda m: datetime.datetime.strptime(m, "%B").month)
@@ -233,39 +282,40 @@ with col3:
     else:
         st.metric("Top Category", "N/A", "$0")
 with col4:
-    st.metric("Card Payments Made", f"${total_payments_made:,.2f}", 
+    st.metric("Card Payments Made", f"${total_payments_made:,.2f}",
               help="Payments to credit card balance (excluded from spending)")
 
 st.markdown("---")
 
 # --- Tabs for different views ---
-tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy, tab_recurring, tab_manage = st.tabs(
-    ["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting", "📈 Year Comparison", "🔄 Recurring", "⚙️ Manage Categories"])
+tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy, tab_recurring, tab_cashflow, tab_manage = st.tabs(
+    ["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting",
+     "📈 Year Comparison", "🔄 Recurring", "💰 Income & Cash Flow", "⚙️ Manage Categories"])
 
 # TAB 1: OVERVIEW
 with tab_overview:
     col_chart1, col_chart2 = st.columns([2, 1])
-    
+
     with col_chart1:
         st.subheader("Spending Trend Over Time")
         time_group = df_filtered.groupby('Transaction Date')['Net_Amount'].sum().reset_index()
         time_group['Net_Amount'] = abs(time_group['Net_Amount'])
-        
-        fig_trend = px.line(time_group, x='Transaction Date', y='Net_Amount', 
+
+        fig_trend = px.line(time_group, x='Transaction Date', y='Net_Amount',
                             markers=True, line_shape='spline')
         fig_trend.update_traces(line_color='#3B82F6', line_width=3)
         fig_trend.update_layout(height=350, xaxis_title="", yaxis_title="Amount ($)", template="plotly_white")
         st.plotly_chart(fig_trend, use_container_width=True)
-        
+
     with col_chart2:
         st.subheader("Category Split")
         # UPDATED: Pi chart now uses Budget_Category
         cat_group = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().reset_index()
-        cat_group['Net_Amount'] = cat_group['Net_Amount'].clip(lower=0) 
-        
+        cat_group['Net_Amount'] = cat_group['Net_Amount'].clip(lower=0)
+
         fig_pie = px.pie(cat_group, values='Net_Amount', names='Budget_Category', hole=0.6,
                               color_discrete_sequence=px.colors.qualitative.Prism)
-        
+
         fig_pie.update_layout(height=350, showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -344,7 +394,7 @@ with tab_vendor:
 # TAB 3: TRANSACTION DATA
 with tab_transactions:
     st.subheader("Detailed Transaction Log")
-    
+
     # UPDATED: Table now displays Budget_Category instead of bank Category
     st.dataframe(
         df_filtered[['Transaction Date', 'Clean_Description', 'Budget_Category', 'Net_Amount']]
@@ -354,7 +404,7 @@ with tab_transactions:
             "Clean_Description": st.column_config.TextColumn("Merchant"),
             "Budget_Category": st.column_config.TextColumn("Budget Category"),
             "Net_Amount": st.column_config.NumberColumn(
-                "Amount", 
+                "Amount",
                 format="$%.2f",
                 help="Net spending amount"
             ),
@@ -623,7 +673,177 @@ with tab_recurring:
             fig_rec_trend.update_layout(template="plotly_white", height=300)
             st.plotly_chart(fig_rec_trend, use_container_width=True)
 
-# TAB 7: MANAGE CATEGORIES
+# TAB 7: INCOME & CASH FLOW
+with tab_cashflow:
+    st.subheader("Income & Cash Flow")
+
+    if df_income_year.empty:
+        st.info("No income data found for this year. To enable this tab:\n"
+                "1. Export your Chase checking account CSV\n"
+                "2. Place it in `Data/Checking/`\n"
+                "3. Re-run `python Yearly_Spending.py`")
+    else:
+        # --- Metric Cards ---
+        total_income = df_income_year['Net_Amount'].sum()
+        total_cc_expenses = df_year['Net_Amount'].sum()
+        total_checking_expenses = df_checking_year['Net_Amount'].sum() if not df_checking_year.empty else 0
+        total_all_expenses = total_cc_expenses + total_checking_expenses
+        net_savings = total_income - total_all_expenses
+        savings_rate = (net_savings / total_income * 100) if total_income > 0 else 0
+
+        col_cf1, col_cf2, col_cf3, col_cf4 = st.columns(4)
+        with col_cf1:
+            st.metric("Total Income", f"${total_income:,.2f}")
+        with col_cf2:
+            st.metric("Total Expenses", f"${total_all_expenses:,.2f}",
+                       help="Credit card + checking/debit spending combined")
+        with col_cf3:
+            delta_color = "normal" if net_savings >= 0 else "inverse"
+            st.metric("Net Savings", f"${net_savings:,.2f}",
+                       delta=f"{savings_rate:.1f}% savings rate",
+                       delta_color=delta_color)
+        with col_cf4:
+            st.metric("Checking Expenses", f"${total_checking_expenses:,.2f}",
+                       help="Debit card / ACH expenses from checking account")
+
+        st.markdown("---")
+
+        # --- Monthly Income vs Expenses Chart ---
+        st.subheader("Monthly Income vs Expenses")
+
+        month_names_map = {
+            1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+            7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+        }
+
+        # Monthly income
+        df_income_year['month_num'] = df_income_year['Transaction Date'].dt.month
+        monthly_income = df_income_year.groupby('month_num')['Net_Amount'].sum().reset_index()
+        monthly_income.columns = ['month_num', 'Income']
+
+        # Monthly expenses (credit + checking)
+        df_year_copy = df_year.copy()
+        df_year_copy['month_num'] = df_year_copy['Transaction Date'].dt.month
+        monthly_cc = df_year_copy.groupby('month_num')['Net_Amount'].sum().reset_index()
+        monthly_cc.columns = ['month_num', 'CC_Expenses']
+
+        monthly_ck_exp = pd.DataFrame({'month_num': range(1, 13), 'Checking_Expenses': 0})
+        if not df_checking_year.empty:
+            df_ck_copy = df_checking_year.copy()
+            df_ck_copy['month_num'] = df_ck_copy['Transaction Date'].dt.month
+            monthly_ck_exp = df_ck_copy.groupby('month_num')['Net_Amount'].sum().reset_index()
+            monthly_ck_exp.columns = ['month_num', 'Checking_Expenses']
+
+        # Merge all monthly data
+        monthly_cf = monthly_income.merge(monthly_cc, on='month_num', how='outer') \
+                                   .merge(monthly_ck_exp, on='month_num', how='outer') \
+                                   .fillna(0)
+        monthly_cf['Total_Expenses'] = monthly_cf['CC_Expenses'] + monthly_cf['Checking_Expenses']
+        monthly_cf['Net_Savings'] = monthly_cf['Income'] - monthly_cf['Total_Expenses']
+        monthly_cf['Month'] = monthly_cf['month_num'].map(month_names_map)
+        monthly_cf = monthly_cf.sort_values('month_num')
+
+        fig_cf = go.Figure()
+        fig_cf.add_trace(go.Bar(
+            x=monthly_cf['Month'], y=monthly_cf['Income'],
+            name='Income', marker_color='#22C55E'
+        ))
+        fig_cf.add_trace(go.Bar(
+            x=monthly_cf['Month'], y=monthly_cf['Total_Expenses'],
+            name='Expenses', marker_color='#EF4444'
+        ))
+        fig_cf.add_trace(go.Scatter(
+            x=monthly_cf['Month'], y=monthly_cf['Net_Savings'],
+            name='Net Savings', mode='lines+markers',
+            line=dict(color='#3B82F6', width=3, dash='dot')
+        ))
+        fig_cf.update_layout(
+            barmode='group', template="plotly_white", height=400,
+            yaxis_title="Amount ($)", legend_title_text=""
+        )
+        st.plotly_chart(fig_cf, use_container_width=True)
+
+        # --- Two-column layout: Income Source + Checking Category ---
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.subheader("Income Breakdown by Source")
+            if 'Income_Source' in df_income_year.columns:
+                source_group = df_income_year.groupby('Income_Source')['Net_Amount'].sum().reset_index()
+                fig_income_pie = px.pie(
+                    source_group, values='Net_Amount', names='Income_Source', hole=0.6,
+                    color_discrete_sequence=px.colors.qualitative.Safe
+                )
+                fig_income_pie.update_layout(height=350, margin=dict(t=10, b=0, l=0, r=0))
+                st.plotly_chart(fig_income_pie, use_container_width=True)
+            else:
+                st.info("Income source classification not available.")
+
+        with col_right:
+            st.subheader("Checking Spending by Category")
+            if not df_checking_year.empty and 'Budget_Category' in df_checking_year.columns:
+                ck_cat_group = df_checking_year.groupby('Budget_Category')['Net_Amount'].sum().reset_index()
+                fig_ck_pie = px.pie(
+                    ck_cat_group, values='Net_Amount', names='Budget_Category', hole=0.6,
+                    color_discrete_sequence=px.colors.qualitative.Prism
+                )
+                fig_ck_pie.update_layout(height=350, margin=dict(t=10, b=0, l=0, r=0))
+                st.plotly_chart(fig_ck_pie, use_container_width=True)
+            else:
+                st.info("No checking expenses to display.")
+
+        # --- Debit vs Credit Spending ---
+        st.markdown("---")
+        st.subheader("Debit vs Credit Card Spending")
+
+        df_year_copy['source_type'] = 'Credit Card'
+        debit_monthly = pd.DataFrame({'month_num': range(1, 13), 'Amount': 0, 'source_type': 'Checking/Debit'})
+        if not df_checking_year.empty:
+            df_ck_m = df_checking_year.copy()
+            df_ck_m['month_num'] = df_ck_m['Transaction Date'].dt.month
+            debit_monthly = df_ck_m.groupby('month_num')['Net_Amount'].sum().reset_index()
+            debit_monthly.columns = ['month_num', 'Amount']
+            debit_monthly['source_type'] = 'Checking/Debit'
+
+        credit_monthly = df_year_copy.groupby('month_num')['Net_Amount'].sum().reset_index()
+        credit_monthly.columns = ['month_num', 'Amount']
+        credit_monthly['source_type'] = 'Credit Card'
+
+        combined_sources = pd.concat([credit_monthly, debit_monthly], ignore_index=True)
+        combined_sources['Month'] = combined_sources['month_num'].map(month_names_map)
+        combined_sources = combined_sources.sort_values('month_num')
+
+        fig_sources = px.bar(
+            combined_sources, x='Month', y='Amount', color='source_type',
+            barmode='stack',
+            labels={'Amount': 'Amount ($)', 'source_type': 'Account'},
+            color_discrete_map={'Credit Card': '#8B5CF6', 'Checking/Debit': '#F59E0B'}
+        )
+        fig_sources.update_layout(template="plotly_white", height=350, legend_title_text="")
+        st.plotly_chart(fig_sources, use_container_width=True)
+
+        # --- Income Transactions Table ---
+        st.markdown("---")
+        st.subheader("Income Transactions")
+
+        income_display_cols = ['Transaction Date', 'Clean_Description', 'Net_Amount']
+        if 'Income_Source' in df_income_year.columns:
+            income_display_cols.insert(2, 'Income_Source')
+
+        st.dataframe(
+            df_income_year[income_display_cols].sort_values('Transaction Date', ascending=False),
+            column_config={
+                "Transaction Date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+                "Clean_Description": st.column_config.TextColumn("Description"),
+                "Income_Source": st.column_config.TextColumn("Source"),
+                "Net_Amount": st.column_config.NumberColumn("Amount", format="$%.2f"),
+            },
+            use_container_width=True,
+            height=400,
+            hide_index=True
+        )
+
+# TAB 8: MANAGE CATEGORIES
 with tab_manage:
     st.subheader("Category Mapping Manager")
     st.caption("Review and assign budget categories to merchants. "
