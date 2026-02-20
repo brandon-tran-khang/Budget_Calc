@@ -88,6 +88,11 @@ BUDGET_CATEGORIES = [
     "Pest control", "Landscaping", "Games", "Vacation", "Personal"
 ]
 
+MONTH_NAMES = {
+    1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+    7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
+}
+
 MAPPINGS_FILE = Path(__file__).resolve().parent / "category_mappings.csv"
 
 @st.cache_data
@@ -126,6 +131,259 @@ def apply_mapping_overlay(df, mappings_dict):
         if key in mappings_dict:
             df.at[idx, 'Budget_Category'] = mappings_dict[key]
     return df
+
+# --- Report Generation Helpers ---
+
+@st.cache_data
+def generate_monthly_summary_csv(_df_year_dict, _df_trans_dict, selected_year, selected_month):
+    """Generate a monthly spending summary CSV with comparisons to prior periods."""
+    df_year = pd.DataFrame(_df_year_dict)
+    df_year['Transaction Date'] = pd.to_datetime(df_year['Transaction Date'])
+    df_trans = pd.DataFrame(_df_trans_dict)
+    df_trans['Transaction Date'] = pd.to_datetime(df_trans['Transaction Date'])
+
+    month_num = {v: k for k, v in MONTH_NAMES.items()}.get(selected_month[:3])
+    if month_num is None:
+        # Try full month name
+        try:
+            month_num = datetime.datetime.strptime(selected_month, "%B").month
+        except ValueError:
+            return ""
+
+    month_data = df_year[df_year['Transaction Date'].dt.month == month_num]
+    if month_data.empty:
+        return pd.DataFrame(columns=['Category', 'Total_Spent', 'Transactions', 'Pct_of_Total',
+                                      'vs_Prev_Month_$', 'vs_Prev_Month_%',
+                                      'vs_Same_Month_Last_Year_$', 'vs_Same_Month_Last_Year_%']).to_csv(index=False)
+
+    summary = month_data.groupby('Budget_Category').agg(
+        Total_Spent=('Net_Amount', 'sum'),
+        Transactions=('Net_Amount', 'count')
+    ).reset_index()
+
+    grand_total = summary['Total_Spent'].sum()
+    summary['Pct_of_Total'] = (summary['Total_Spent'] / grand_total * 100).round(1) if grand_total > 0 else 0
+
+    # Previous month comparison
+    if month_num > 1:
+        prev_data = df_year[df_year['Transaction Date'].dt.month == month_num - 1]
+        prev_by_cat = prev_data.groupby('Budget_Category')['Net_Amount'].sum()
+        summary['vs_Prev_Month_$'] = summary.apply(
+            lambda r: r['Total_Spent'] - prev_by_cat.get(r['Budget_Category'], 0), axis=1).round(2)
+        summary['vs_Prev_Month_%'] = summary.apply(
+            lambda r: ((r['Total_Spent'] - prev_by_cat.get(r['Budget_Category'], 0))
+                        / prev_by_cat.get(r['Budget_Category'], 1) * 100)
+            if prev_by_cat.get(r['Budget_Category'], 0) != 0 else None, axis=1).round(1)
+    else:
+        summary['vs_Prev_Month_$'] = None
+        summary['vs_Prev_Month_%'] = None
+
+    # Same month last year comparison
+    prev_year_data = df_trans[(df_trans['Transaction Date'].dt.year == selected_year - 1) &
+                              (df_trans['Transaction Date'].dt.month == month_num)]
+    if not prev_year_data.empty:
+        ly_by_cat = prev_year_data.groupby('Budget_Category')['Net_Amount'].sum()
+        summary['vs_Same_Month_Last_Year_$'] = summary.apply(
+            lambda r: r['Total_Spent'] - ly_by_cat.get(r['Budget_Category'], 0), axis=1).round(2)
+        summary['vs_Same_Month_Last_Year_%'] = summary.apply(
+            lambda r: ((r['Total_Spent'] - ly_by_cat.get(r['Budget_Category'], 0))
+                        / ly_by_cat.get(r['Budget_Category'], 1) * 100)
+            if ly_by_cat.get(r['Budget_Category'], 0) != 0 else None, axis=1).round(1)
+    else:
+        summary['vs_Same_Month_Last_Year_$'] = None
+        summary['vs_Same_Month_Last_Year_%'] = None
+
+    summary = summary.sort_values('Total_Spent', ascending=False)
+
+    # Add totals row
+    totals = pd.DataFrame([{
+        'Budget_Category': 'TOTAL',
+        'Total_Spent': grand_total,
+        'Transactions': summary['Transactions'].sum(),
+        'Pct_of_Total': 100.0,
+        'vs_Prev_Month_$': summary['vs_Prev_Month_$'].sum() if summary['vs_Prev_Month_$'].notna().any() else None,
+        'vs_Prev_Month_%': None,
+        'vs_Same_Month_Last_Year_$': summary['vs_Same_Month_Last_Year_$'].sum() if summary['vs_Same_Month_Last_Year_$'].notna().any() else None,
+        'vs_Same_Month_Last_Year_%': None,
+    }])
+    summary = pd.concat([summary, totals], ignore_index=True)
+    summary = summary.rename(columns={'Budget_Category': 'Category'})
+    return summary.to_csv(index=False)
+
+
+@st.cache_data
+def generate_annual_summary_csv(_df_year_dict, _df_income_year_dict, _df_checking_year_dict, selected_year):
+    """Generate an annual summary CSV with monthly breakdown by category."""
+    df_year = pd.DataFrame(_df_year_dict)
+    df_year['Transaction Date'] = pd.to_datetime(df_year['Transaction Date'])
+
+    df_year['month_num'] = df_year['Transaction Date'].dt.month
+
+    # Pivot: rows = category, columns = months
+    pivot = df_year.pivot_table(
+        index='Budget_Category', columns='month_num',
+        values='Net_Amount', aggfunc='sum', fill_value=0
+    )
+    # Ensure all 12 months present
+    for m in range(1, 13):
+        if m not in pivot.columns:
+            pivot[m] = 0
+    pivot = pivot[sorted(pivot.columns)]
+    pivot.columns = [MONTH_NAMES[m] for m in pivot.columns]
+
+    pivot['Annual_Total'] = pivot.sum(axis=1)
+
+    # For current year, divide by elapsed months; for past years, divide by 12
+    is_current = (selected_year == datetime.date.today().year)
+    if is_current:
+        elapsed_months = datetime.date.today().month
+    else:
+        elapsed_months = 12
+    pivot['Monthly_Avg'] = (pivot['Annual_Total'] / elapsed_months).round(2)
+
+    month_cols = [MONTH_NAMES[m] for m in range(1, 13)]
+    pivot['Min_Month'] = pivot[month_cols].replace(0, float('nan')).min(axis=1)
+    pivot['Max_Month'] = pivot[month_cols].max(axis=1)
+
+    pivot = pivot.sort_values('Annual_Total', ascending=False)
+
+    # Add summary rows
+    monthly_total = pivot[month_cols].sum()
+    monthly_total['Annual_Total'] = monthly_total.sum()
+    monthly_total['Monthly_Avg'] = (monthly_total['Annual_Total'] / elapsed_months).round(2) if elapsed_months > 0 else 0
+    monthly_total['Min_Month'] = monthly_total[month_cols].replace(0, float('nan')).min()
+    monthly_total['Max_Month'] = monthly_total[month_cols].max()
+    monthly_total.name = 'MONTHLY TOTAL'
+    pivot = pd.concat([pivot, monthly_total.to_frame().T])
+
+    monthly_avg_row = monthly_total / elapsed_months if elapsed_months > 0 else monthly_total * 0
+    monthly_avg_row.name = 'MONTHLY AVERAGE'
+    pivot = pd.concat([pivot, monthly_avg_row.to_frame().T])
+
+    # Income section
+    df_income_year = pd.DataFrame(_df_income_year_dict)
+    df_checking_year = pd.DataFrame(_df_checking_year_dict)
+
+    if not df_income_year.empty and 'Net_Amount' in df_income_year.columns:
+        df_income_year['Transaction Date'] = pd.to_datetime(df_income_year['Transaction Date'])
+        df_income_year['month_num'] = df_income_year['Transaction Date'].dt.month
+        income_monthly = df_income_year.groupby('month_num')['Net_Amount'].sum()
+
+        income_row = pd.Series(0, index=pivot.columns, name='INCOME')
+        for m_num, m_name in MONTH_NAMES.items():
+            income_row[m_name] = income_monthly.get(m_num, 0)
+        income_row['Annual_Total'] = income_row[month_cols].sum()
+        income_row['Monthly_Avg'] = (income_row['Annual_Total'] / elapsed_months).round(2) if elapsed_months > 0 else 0
+        income_row['Min_Month'] = None
+        income_row['Max_Month'] = None
+
+        # Total expenses (CC + checking)
+        total_exp_row = monthly_total.copy()
+        if not df_checking_year.empty and 'Net_Amount' in df_checking_year.columns:
+            df_checking_year['Transaction Date'] = pd.to_datetime(df_checking_year['Transaction Date'])
+            df_checking_year['month_num'] = df_checking_year['Transaction Date'].dt.month
+            ck_monthly = df_checking_year.groupby('month_num')['Net_Amount'].sum()
+            for m_num, m_name in MONTH_NAMES.items():
+                total_exp_row[m_name] = total_exp_row.get(m_name, 0) + ck_monthly.get(m_num, 0)
+            total_exp_row['Annual_Total'] = total_exp_row[month_cols].sum()
+            total_exp_row['Monthly_Avg'] = (total_exp_row['Annual_Total'] / elapsed_months).round(2) if elapsed_months > 0 else 0
+        total_exp_row.name = 'TOTAL EXPENSES'
+        total_exp_row['Min_Month'] = None
+        total_exp_row['Max_Month'] = None
+
+        net_row = pd.Series(0, index=pivot.columns, name='NET SAVINGS')
+        for col in month_cols:
+            net_row[col] = income_row[col] - total_exp_row[col]
+        net_row['Annual_Total'] = income_row['Annual_Total'] - total_exp_row['Annual_Total']
+        net_row['Monthly_Avg'] = (net_row['Annual_Total'] / elapsed_months).round(2) if elapsed_months > 0 else 0
+        net_row['Min_Month'] = None
+        net_row['Max_Month'] = None
+
+        rate_row = pd.Series(0, index=pivot.columns, name='SAVINGS RATE')
+        for col in month_cols:
+            rate_row[col] = (net_row[col] / income_row[col] * 100).round(1) if income_row[col] > 0 else 0
+        rate_row['Annual_Total'] = (net_row['Annual_Total'] / income_row['Annual_Total'] * 100).round(1) if income_row['Annual_Total'] > 0 else 0
+        rate_row['Monthly_Avg'] = None
+        rate_row['Min_Month'] = None
+        rate_row['Max_Month'] = None
+
+        # Add a blank separator row
+        blank_row = pd.Series('', index=pivot.columns, name='')
+        pivot = pd.concat([pivot, blank_row.to_frame().T, income_row.to_frame().T,
+                           total_exp_row.to_frame().T, net_row.to_frame().T, rate_row.to_frame().T])
+
+    pivot.index.name = 'Category'
+    return pivot.to_csv()
+
+
+def generate_filtered_transactions_csv(df_filtered):
+    """Generate a CSV of the currently filtered transactions."""
+    if df_filtered.empty:
+        return pd.DataFrame(columns=['Date', 'Merchant', 'Category', 'Amount', 'Note', 'Tags']).to_csv(index=False)
+
+    cols = []
+    for c in ['Transaction Date', 'Clean_Description', 'Budget_Category', 'Net_Amount', 'Note', 'Tags']:
+        if c in df_filtered.columns:
+            cols.append(c)
+
+    export = df_filtered[cols].copy()
+    rename_map = {
+        'Transaction Date': 'Date',
+        'Clean_Description': 'Merchant',
+        'Budget_Category': 'Category',
+        'Net_Amount': 'Amount',
+    }
+    export = export.rename(columns=rename_map)
+    export = export.sort_values('Date', ascending=False)
+    return export.to_csv(index=False)
+
+
+def generate_html_summary(df_filtered, df_income_year, selected_year, selected_month):
+    """Generate a copy-pasteable HTML summary of spending."""
+    total_spend = df_filtered['Net_Amount'].sum() if not df_filtered.empty else 0
+    tx_count = len(df_filtered)
+
+    # Top 3 categories
+    top_cats = []
+    if not df_filtered.empty:
+        cat_totals = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().sort_values(ascending=False)
+        for cat, amt in cat_totals.head(3).items():
+            top_cats.append(f"{cat}: ${amt:,.2f}")
+
+    # Biggest purchase
+    biggest = ""
+    if not df_filtered.empty:
+        max_row = df_filtered.loc[df_filtered['Net_Amount'].idxmax()]
+        biggest = f"{max_row.get('Clean_Description', 'N/A')} — ${max_row['Net_Amount']:,.2f}"
+
+    # Savings rate
+    savings_line = ""
+    if not df_income_year.empty and 'Net_Amount' in df_income_year.columns:
+        total_income = df_income_year['Net_Amount'].sum()
+        if total_income > 0:
+            net = total_income - total_spend
+            rate = net / total_income * 100
+            savings_line = f"""
+            <tr><td style="padding:8px 12px;border:1px solid #ddd;font-weight:600;">Savings Rate</td>
+                <td style="padding:8px 12px;border:1px solid #ddd;">{rate:.1f}% (${net:,.2f} saved)</td></tr>"""
+
+    period = f"{selected_month} {selected_year}" if selected_month != 'All' else str(selected_year)
+    top_cats_html = "<br>".join(top_cats) if top_cats else "N/A"
+
+    html = f"""<table style="border-collapse:collapse;font-family:Arial,sans-serif;max-width:500px;">
+  <tr style="background:#1E293B;color:white;">
+    <th colspan="2" style="padding:12px;text-align:left;font-size:16px;">Spending Summary — {period}</th>
+  </tr>
+  <tr><td style="padding:8px 12px;border:1px solid #ddd;font-weight:600;">Total Spent</td>
+      <td style="padding:8px 12px;border:1px solid #ddd;">${total_spend:,.2f}</td></tr>
+  <tr><td style="padding:8px 12px;border:1px solid #ddd;font-weight:600;">Transactions</td>
+      <td style="padding:8px 12px;border:1px solid #ddd;">{tx_count}</td></tr>
+  <tr><td style="padding:8px 12px;border:1px solid #ddd;font-weight:600;">Top Categories</td>
+      <td style="padding:8px 12px;border:1px solid #ddd;">{top_cats_html}</td></tr>
+  <tr><td style="padding:8px 12px;border:1px solid #ddd;font-weight:600;">Biggest Purchase</td>
+      <td style="padding:8px 12px;border:1px solid #ddd;">{biggest}</td></tr>{savings_line}
+</table>"""
+    return html
 
 # --- Data Loading ---
 @st.cache_data
@@ -372,11 +630,7 @@ with tab_overview:
         df_fv = df_filtered.copy()
         df_fv['month_num'] = df_fv['Transaction Date'].dt.month
         month_fv = df_fv.groupby(['month_num', 'spending_type'])['Net_Amount'].sum().reset_index()
-        month_names_map = {
-            1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-            7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
-        }
-        month_fv['Month'] = month_fv['month_num'].map(month_names_map)
+        month_fv['Month'] = month_fv['month_num'].map(MONTH_NAMES)
         month_fv = month_fv.sort_values('month_num')
 
         fig_stacked = px.bar(
@@ -391,6 +645,36 @@ with tab_overview:
             legend_title_text=""
         )
         st.plotly_chart(fig_stacked, use_container_width=True)
+
+    # --- Monthly Report Download ---
+    st.markdown("---")
+    if selected_month == 'All':
+        st.download_button(
+            "Download Monthly Report",
+            data="",
+            file_name="select_a_month.csv",
+            mime="text/csv",
+            disabled=True,
+            help="Select a specific month in the sidebar to download a monthly report."
+        )
+    else:
+        month_abbr = selected_month[:3]
+        monthly_csv = generate_monthly_summary_csv(
+            df_year.to_dict('list'), df_trans.to_dict('list'),
+            selected_year, selected_month
+        )
+        st.download_button(
+            f"Download Monthly Report — {selected_month} {selected_year}",
+            data=monthly_csv,
+            file_name=f"{selected_year}_{month_abbr}_Summary.csv",
+            mime="text/csv"
+        )
+
+    # --- Shareable HTML Summary ---
+    html_summary = generate_html_summary(df_filtered, df_income_year, selected_year, selected_month)
+    with st.expander("Share This Summary"):
+        st.markdown(html_summary, unsafe_allow_html=True)
+        st.caption("Copy the table above and paste into email or Slack. The formatting will be preserved.")
 
 # TAB 2: VENDOR ANALYSIS (No changes needed, uses merchant name)
 with tab_vendor:
@@ -457,6 +741,18 @@ with tab_transactions:
             with col:
                 st.metric(tag_name, f"${tag_amount:,.2f}")
         st.markdown("---")
+
+    # --- B2. Filtered Transactions Download ---
+    month_part = selected_month[:3] if selected_month != 'All' else 'All'
+    cat_part = selected_category.replace(' ', '_').replace('/', '-') if selected_category != 'All' else 'All'
+    tx_filename = f"Transactions_{selected_year}_{month_part}_{cat_part}.csv"
+    tx_csv = generate_filtered_transactions_csv(df_filtered)
+    st.download_button(
+        f"Download Transactions ({len(df_filtered)} rows)",
+        data=tx_csv,
+        file_name=tx_filename,
+        mime="text/csv"
+    )
 
     # --- C. Editable Transaction Table ---
     editor_df = df_filtered[['_tx_key', 'Transaction Date', 'Clean_Description', 'Category', 'Budget_Category', 'Net_Amount', 'Note', 'Tags']].copy()
@@ -601,6 +897,22 @@ with tab_forecast:
     title = "Actual Cumulative Spend vs. Projected Path" if is_current_year else f"Cumulative Spend for {selected_year}"
     fig_proj.update_layout(title=title, template="plotly_white", hovermode="x unified")
     st.plotly_chart(fig_proj, use_container_width=True)
+
+    # --- Annual Report Download ---
+    st.markdown("---")
+    annual_csv = generate_annual_summary_csv(
+        df_year.to_dict('list'),
+        df_income_year.to_dict('list') if not df_income_year.empty else {},
+        df_checking_year.to_dict('list') if not df_checking_year.empty else {},
+        selected_year
+    )
+    ytd_label = " (YTD)" if is_current_year else ""
+    st.download_button(
+        f"Download {selected_year} Annual Report{ytd_label}",
+        data=annual_csv,
+        file_name=f"{selected_year}_Annual_Summary.csv",
+        mime="text/csv"
+    )
 
 # TAB 5: YEAR-OVER-YEAR COMPARISON
 with tab_yoy:
@@ -786,13 +1098,9 @@ with tab_recurring:
         st.markdown("#### Monthly Recurring Spend")
         recurring_tx = df_year[df_year['is_recurring']].copy()
         if not recurring_tx.empty:
-            month_names_map = {
-                1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-                7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
-            }
             recurring_tx['month_num'] = recurring_tx['Transaction Date'].dt.month
             monthly_recurring = recurring_tx.groupby('month_num')['Net_Amount'].sum().reset_index()
-            monthly_recurring['Month_Name'] = monthly_recurring['month_num'].map(month_names_map)
+            monthly_recurring['Month_Name'] = monthly_recurring['month_num'].map(MONTH_NAMES)
 
             fig_rec_trend = px.bar(
                 monthly_recurring, x='Month_Name', y='Net_Amount',
@@ -840,11 +1148,6 @@ with tab_cashflow:
         # --- Monthly Income vs Expenses Chart ---
         st.subheader("Monthly Income vs Expenses")
 
-        month_names_map = {
-            1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-            7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
-        }
-
         # Monthly income
         df_income_year['month_num'] = df_income_year['Transaction Date'].dt.month
         monthly_income = df_income_year.groupby('month_num')['Net_Amount'].sum().reset_index()
@@ -869,7 +1172,7 @@ with tab_cashflow:
                                    .fillna(0)
         monthly_cf['Total_Expenses'] = monthly_cf['CC_Expenses'] + monthly_cf['Checking_Expenses']
         monthly_cf['Net_Savings'] = monthly_cf['Income'] - monthly_cf['Total_Expenses']
-        monthly_cf['Month'] = monthly_cf['month_num'].map(month_names_map)
+        monthly_cf['Month'] = monthly_cf['month_num'].map(MONTH_NAMES)
         monthly_cf = monthly_cf.sort_values('month_num')
 
         fig_cf = go.Figure()
@@ -939,7 +1242,7 @@ with tab_cashflow:
         credit_monthly['source_type'] = 'Credit Card'
 
         combined_sources = pd.concat([credit_monthly, debit_monthly], ignore_index=True)
-        combined_sources['Month'] = combined_sources['month_num'].map(month_names_map)
+        combined_sources['Month'] = combined_sources['month_num'].map(MONTH_NAMES)
         combined_sources = combined_sources.sort_values('month_num')
 
         fig_sources = px.bar(
