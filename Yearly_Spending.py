@@ -3,46 +3,11 @@ import os
 from pathlib import Path
 import re
 
-
-# --- Configuration ---
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "Data"
-
-# 1. Your Strict Budget Categories
-BUDGET_CATEGORIES = [
-    "Home Electricity", "Home Water/Trash", "Home Furniture", "Internet",
-    "Phone Bill", "HOA Bill", "Home Maintenance", "Car Registration",
-    "Discord Subscription", "Spotify Subscription", "Amazon Prime Subscription",
-    "Gym Membership", "Chase Sapphire Preferred Fee", "Costco Membership",
-    "Groceries", "Gas", "Restaurants", "Health / Doctors", "Car Maintenance",
-    "Pest control", "Landscaping", "Games", "Vacation", "Personal"
-]
-
-MAPPINGS_FILE = BASE_DIR / "category_mappings.csv"
-
-# Bank category fallback — maps bank's original category to a reasonable budget default
-BANK_CATEGORY_FALLBACK = {
-    'Food & Drink': 'Restaurants',
-    'Vehicle Services': 'Gas',
-    'Health & Wellness': 'Health / Doctors',
-    'Groceries': 'Groceries',
-    'Home': 'Home Furniture',
-    'Travel': 'Vacation',
-    'Automotive': 'Car Maintenance',
-}
-
-# --- Checking Account Configuration ---
-CHECKING_DIR = DATA_DIR / "Checking"
-
-INCOME_KEYWORDS = ['DIRECT DEP', 'PAYROLL', 'ACH CREDIT', 'DEPOSIT']
-TRANSFER_KEYWORDS = [
-    'TRANSFER', 'PAYMENT TO CHASE CARD', 'ONLINE TRANSFER',
-    'SAVE AS YOU GO', 'ZELLE'
-]
-INCOME_SOURCE_MAP = {
-    'DIRECT DEP': 'Payroll', 'PAYROLL': 'Payroll',
-    'ACH CREDIT': 'ACH Credit', 'DEPOSIT': 'Deposit',
-}
+from config import (
+    BASE_DIR, DATA_DIR, CHECKING_DIR, MAPPINGS_FILE,
+    BUDGET_CATEGORIES, BANK_CATEGORY_FALLBACK,
+    INCOME_KEYWORDS, TRANSFER_KEYWORDS, INCOME_SOURCE_MAP, PAYMENT_TERMS,
+)
 
 # Legacy mapping dictionary — used ONLY to seed category_mappings.csv on first run.
 # To update mappings, edit category_mappings.csv directly or use the Streamlit UI.
@@ -130,11 +95,10 @@ def load_category_mappings():
     except pd.errors.EmptyDataError:
         return {}
 
-    mapping_dict = {}
-    for _, row in mappings_df.iterrows():
-        key = (row['Clean_Description'], row['Bank_Category'])
-        mapping_dict[key] = row['Budget_Category']
-    return mapping_dict
+    return dict(zip(
+        zip(mappings_df['Clean_Description'], mappings_df['Bank_Category']),
+        mappings_df['Budget_Category']
+    ))
 
 # --- Helper Functions ---
 
@@ -324,103 +288,177 @@ def map_category(row, category_map):
     # 5. Default
     return 'Personal'
 
+def process_credit_cards(raw_df, category_map):
+    """Process credit card transactions: clean, categorize, split spending/payments.
+
+    Returns (spending_list, payments_list) — each a list of per-year DataFrames.
+    """
+    df = raw_df.copy()
+    df['Transaction Date'] = pd.to_datetime(df['Transaction Date'], format='mixed')
+    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+    df['Net_Amount'] = df['Amount_Norm']
+    df['account_type'] = 'credit'
+
+    df['Week'] = df['Transaction Date'].dt.isocalendar().week
+    df['Month'] = df['Transaction Date'].dt.strftime('%B')
+    df['Quarter'] = df['Transaction Date'].dt.quarter
+
+    df['Clean_Description'] = df['Description'].apply(clean_merchant_name)
+    df['Category'] = df['Category'].fillna('Uncategorized')
+
+    # Filter out payments
+    is_payment = df['Description'].str.contains('|'.join(PAYMENT_TERMS), case=False, na=False)
+    df_spending = df[~is_payment].copy()
+    df_payments = df[is_payment].copy()
+
+    # Keep only positive spending (money leaving account)
+    df_spending = df_spending[df_spending['Net_Amount'] > 0].copy()
+
+    # Apply category mapping
+    df_spending['Budget_Category'] = df_spending.apply(
+        lambda row: map_category(row, category_map), axis=1
+    )
+
+    return df_spending, df_payments
+
+
+def process_checking(checking_df, category_map):
+    """Process checking transactions: classify as income/expense/transfer.
+
+    Returns (income_df, expense_df). Transfers are excluded.
+    """
+    ck = checking_df.copy()
+    ck['Transaction Date'] = pd.to_datetime(ck['Transaction Date'], format='mixed')
+    ck['Raw_Amount'] = pd.to_numeric(ck['Amount'], errors='coerce').fillna(0)
+    ck['Net_Amount'] = ck['Amount_Norm']
+
+    ck['Week'] = ck['Transaction Date'].dt.isocalendar().week
+    ck['Month'] = ck['Transaction Date'].dt.strftime('%B')
+    ck['Quarter'] = ck['Transaction Date'].dt.quarter
+
+    ck['Clean_Description'] = ck['Description'].apply(clean_merchant_name)
+    ck['Category'] = ck['Category'].fillna('Uncategorized') if 'Category' in ck.columns else 'Uncategorized'
+
+    # Classify each transaction
+    ck['tx_type'] = ck.apply(
+        lambda row: classify_checking_transaction(row['Description'], row['Raw_Amount']), axis=1
+    )
+
+    ck_income = ck[ck['tx_type'] == 'income'].copy()
+    ck_expense = ck[ck['tx_type'] == 'expense'].copy()
+
+    # Income: ensure positive amounts
+    if not ck_income.empty:
+        ck_income['Net_Amount'] = ck_income['Raw_Amount'].abs()
+        ck_income = ck_income[ck_income['Net_Amount'] > 0].copy()
+        ck_income['Income_Source'] = ck_income['Description'].apply(classify_income_source)
+
+    # Expenses: ensure positive amounts + categorize
+    if not ck_expense.empty:
+        ck_expense['Net_Amount'] = ck_expense['Net_Amount'].abs()
+        ck_expense = ck_expense[ck_expense['Net_Amount'] > 0].copy()
+        ck_expense['Budget_Category'] = ck_expense.apply(
+            lambda row: map_category(row, category_map), axis=1
+        )
+
+    return ck_income, ck_expense
+
+
+def export_yearly_and_combined(data_list, years, output_cols, per_year_suffix, combined_filename,
+                               extra_per_year_exports=None):
+    """Export per-year CSVs and a combined multi-year CSV.
+
+    Args:
+        data_list: Full DataFrame to split by year.
+        years: Sorted list of years.
+        output_cols: Columns to include in output.
+        per_year_suffix: e.g. '_All_Transactions.csv'.
+        combined_filename: e.g. 'all_transactions.csv'.
+        extra_per_year_exports: Optional callable(year_df, year) for extra per-year files.
+    """
+    all_yearly = []
+
+    # Clean up old files
+    for year in years:
+        file_path = DATA_DIR / f"{year}{per_year_suffix}"
+        if file_path.exists():
+            file_path.unlink()
+
+    for year in years:
+        year_data = data_list[data_list['Transaction Date'].dt.year == year].copy()
+        if not year_data.empty:
+            year_data[output_cols].to_csv(DATA_DIR / f"{year}{per_year_suffix}", index=False)
+            all_yearly.append(year_data[output_cols])
+
+            if extra_per_year_exports:
+                extra_per_year_exports(year_data, year)
+
+            print(f"  {year}: {len(year_data)} transactions, ${year_data['Net_Amount'].sum():,.2f}")
+
+    if all_yearly:
+        combined = pd.concat(all_yearly, ignore_index=True).drop_duplicates()
+        combined.to_csv(DATA_DIR / combined_filename, index=False)
+        print(f"\nCombined: {len(combined)} total transactions in {combined_filename}")
+
+    return all_yearly
+
+
 def main():
     print("--- Starting Budget Processing ---")
 
-    # 1. Load credit card data
+    # 1. Load data
     raw_df = load_and_combine_csv_files(DATA_DIR)
-
-    # 2. Load checking data
     checking_df = load_checking_csv_files(CHECKING_DIR)
 
     if raw_df.empty and checking_df.empty:
         print("No data found.")
         return
 
-    # --- Process credit card data ---
-    all_yearly_spending = []
-    all_yearly_payments = []
+    category_map = load_category_mappings()
 
+    # --- Credit card processing ---
     if not raw_df.empty:
-        df = raw_df.copy()
-        df['Transaction Date'] = pd.to_datetime(df['Transaction Date'], format='mixed')
-        df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-        df['Net_Amount'] = df['Amount_Norm']
-        df['account_type'] = 'credit'
-
-        df['Week'] = df['Transaction Date'].dt.isocalendar().week
-        df['Month'] = df['Transaction Date'].dt.strftime('%B')
-        df['Quarter'] = df['Transaction Date'].dt.quarter
-
-        df['Clean_Description'] = df['Description'].apply(clean_merchant_name)
-        df['Category'] = df['Category'].fillna('Uncategorized')
-
-        # Filter out payments
-        payment_terms = ['PAYMENT THANK YOU', 'MOBILE PAYMENT', 'CREDIT CARD PYMT', 'AUTOPAY']
-        is_payment = df['Description'].str.contains('|'.join(payment_terms), case=False, na=False)
-
-        df_spending = df[~is_payment].copy()
-        df_payments = df[is_payment].copy()
-
-        # Keep only positive spending (money leaving account)
-        df_spending = df_spending[df_spending['Net_Amount'] > 0].copy()
-
-        # Load category mappings from external CSV (seeds on first run)
-        category_map = load_category_mappings()
-
-        # Apply the map
-        df_spending['Budget_Category'] = df_spending.apply(
-            lambda row: map_category(row, category_map), axis=1
-        )
-
-        # Detect all available years
+        df_spending, df_payments = process_credit_cards(raw_df, category_map)
         cc_years = sorted(df_spending['Transaction Date'].dt.year.unique())
 
-        # Clean up old output files for all detected years
-        print("Cleaning up old export files...")
-        for year in cc_years:
-            for suffix in ['_All_Transactions.csv', '_Credit_Card_Payments.csv',
-                           '_Weekly_Summary.csv', '_Quarterly_Summary.csv']:
-                file_path = DATA_DIR / f"{year}{suffix}"
-                if file_path.exists():
-                    file_path.unlink()
-                    print(f"  Removed: {year}{suffix}")
-
-        # Per-year export for credit cards
         output_cols = ['Transaction Date', 'Clean_Description', 'Category', 'Budget_Category',
                        'Net_Amount', 'Source', 'account_type', 'Month', 'Quarter', 'Week']
 
+        def cc_extra_exports(year_data, year):
+            year_data.groupby(['Week', 'Category'])['Net_Amount'].sum().unstack(fill_value=0).to_csv(
+                DATA_DIR / f"{year}_Weekly_Summary.csv")
+            year_data.groupby(['Quarter', 'Category'])['Net_Amount'].sum().unstack(fill_value=0).to_csv(
+                DATA_DIR / f"{year}_Quarterly_Summary.csv")
+
+        # Clean up summary files too
         for year in cc_years:
-            year_spending = df_spending[df_spending['Transaction Date'].dt.year == year].copy()
+            for suffix in ['_Weekly_Summary.csv', '_Quarterly_Summary.csv']:
+                fp = DATA_DIR / f"{year}{suffix}"
+                if fp.exists():
+                    fp.unlink()
+
+        all_yearly_spending = export_yearly_and_combined(
+            df_spending, cc_years, output_cols,
+            '_All_Transactions.csv', 'all_transactions.csv',
+            extra_per_year_exports=cc_extra_exports
+        )
+
+        # Payments export
+        for year in cc_years:
+            fp = DATA_DIR / f"{year}_Credit_Card_Payments.csv"
+            if fp.exists():
+                fp.unlink()
+        all_yearly_payments = []
+        for year in cc_years:
             year_payments = df_payments[df_payments['Transaction Date'].dt.year == year].copy()
-
-            if not year_spending.empty:
-                year_spending[output_cols].to_csv(DATA_DIR / f"{year}_All_Transactions.csv", index=False)
-                all_yearly_spending.append(year_spending[output_cols])
-
-                # Summaries
-                year_spending.groupby(['Week', 'Category'])['Net_Amount'].sum().unstack(fill_value=0).to_csv(
-                    DATA_DIR / f"{year}_Weekly_Summary.csv")
-                year_spending.groupby(['Quarter', 'Category'])['Net_Amount'].sum().unstack(fill_value=0).to_csv(
-                    DATA_DIR / f"{year}_Quarterly_Summary.csv")
-
-                print(f"  {year}: {len(year_spending)} transactions, ${year_spending['Net_Amount'].sum():,.2f}")
-
             if not year_payments.empty:
                 year_payments.to_csv(DATA_DIR / f"{year}_Credit_Card_Payments.csv", index=False)
                 all_yearly_payments.append(year_payments)
-
-        # Combined multi-year files
-        if all_yearly_spending:
-            combined_spending = pd.concat(all_yearly_spending, ignore_index=True).drop_duplicates()
-            combined_spending.to_csv(DATA_DIR / "all_transactions.csv", index=False)
-            print(f"\nCombined: {len(combined_spending)} total credit card transactions across {len(cc_years)} year(s)")
-
         if all_yearly_payments:
             combined_payments = pd.concat(all_yearly_payments, ignore_index=True).drop_duplicates()
             combined_payments.to_csv(DATA_DIR / "all_credit_card_payments.csv", index=False)
 
-        # Count unmapped merchants for user awareness
+        # Count unmapped merchants
         all_spending = pd.concat(all_yearly_spending, ignore_index=True) if all_yearly_spending else pd.DataFrame()
         if not all_spending.empty:
             unmapped = all_spending[all_spending['Budget_Category'] == 'Personal']
@@ -429,104 +467,31 @@ def main():
                 print(f"\n{len(unmapped_merchants)} merchant(s) defaulted to 'Personal'.")
                 print("Use the 'Manage Categories' tab in the dashboard to review and assign them.")
 
-    # --- Process checking data ---
-    all_yearly_income = []
-    all_yearly_checking_spending = []
-
+    # --- Checking account processing ---
     if not checking_df.empty:
-        ck = checking_df.copy()
-        ck['Transaction Date'] = pd.to_datetime(ck['Transaction Date'], format='mixed')
-        # Raw Amount for classification (positive = deposit, negative = debit)
-        ck['Raw_Amount'] = pd.to_numeric(ck['Amount'], errors='coerce').fillna(0)
-        ck['Net_Amount'] = ck['Amount_Norm']
+        ck_income, ck_expense = process_checking(checking_df, category_map)
 
-        ck['Week'] = ck['Transaction Date'].dt.isocalendar().week
-        ck['Month'] = ck['Transaction Date'].dt.strftime('%B')
-        ck['Quarter'] = ck['Transaction Date'].dt.quarter
-
-        ck['Clean_Description'] = ck['Description'].apply(clean_merchant_name)
-        ck['Category'] = ck['Category'].fillna('Uncategorized') if 'Category' in ck.columns else 'Uncategorized'
-
-        # Classify each transaction
-        ck['tx_type'] = ck.apply(
-            lambda row: classify_checking_transaction(row['Description'], row['Raw_Amount']), axis=1
-        )
-
-        # Split into income, expense, transfer
-        ck_income = ck[ck['tx_type'] == 'income'].copy()
-        ck_expense = ck[ck['tx_type'] == 'expense'].copy()
-        # Transfers are excluded from all outputs
-
-        # --- Income processing ---
         if not ck_income.empty:
-            # For income, Net_Amount should be positive (amount deposited)
-            ck_income['Net_Amount'] = ck_income['Raw_Amount'].abs()
-            ck_income = ck_income[ck_income['Net_Amount'] > 0].copy()
-            ck_income['Income_Source'] = ck_income['Description'].apply(classify_income_source)
-
             income_cols = ['Transaction Date', 'Clean_Description', 'Category', 'Income_Source',
                            'Net_Amount', 'Source', 'account_type', 'Month', 'Quarter', 'Week']
-
-            # Clean up old income files
             income_years = sorted(ck_income['Transaction Date'].dt.year.unique())
-            for year in income_years:
-                for fname in [f"{year}_All_Income.csv"]:
-                    fp = DATA_DIR / fname
-                    if fp.exists():
-                        fp.unlink()
-
-            for year in income_years:
-                year_income = ck_income[ck_income['Transaction Date'].dt.year == year].copy()
-                if not year_income.empty:
-                    year_income[income_cols].to_csv(DATA_DIR / f"{year}_All_Income.csv", index=False)
-                    all_yearly_income.append(year_income[income_cols])
-                    print(f"  {year} Income: {len(year_income)} deposits, ${year_income['Net_Amount'].sum():,.2f}")
-
-            if all_yearly_income:
-                combined_income = pd.concat(all_yearly_income, ignore_index=True).drop_duplicates()
-                combined_income.to_csv(DATA_DIR / "all_income.csv", index=False)
-                print(f"\nCombined: {len(combined_income)} total income transactions")
-
-        # --- Checking expense processing ---
-        if not ck_expense.empty:
-            # For checking expenses, Net_Amount should be positive (amount spent)
-            ck_expense['Net_Amount'] = ck_expense['Net_Amount'].abs()
-            ck_expense = ck_expense[ck_expense['Net_Amount'] > 0].copy()
-
-            # Apply category mapping to checking expenses
-            if not raw_df.empty:
-                category_map = load_category_mappings()
-            else:
-                category_map = load_category_mappings()
-
-            ck_expense['Budget_Category'] = ck_expense.apply(
-                lambda row: map_category(row, category_map), axis=1
+            export_yearly_and_combined(
+                ck_income, income_years, income_cols,
+                '_All_Income.csv', 'all_income.csv'
             )
 
+        if not ck_expense.empty:
             expense_cols = ['Transaction Date', 'Clean_Description', 'Category', 'Budget_Category',
                             'Net_Amount', 'Source', 'account_type', 'Month', 'Quarter', 'Week']
-
-            # Clean up old checking expense files
             expense_years = sorted(ck_expense['Transaction Date'].dt.year.unique())
-            for year in expense_years:
-                fp = DATA_DIR / f"{year}_All_Checking_Spending.csv"
-                if fp.exists():
-                    fp.unlink()
-
-            for year in expense_years:
-                year_expense = ck_expense[ck_expense['Transaction Date'].dt.year == year].copy()
-                if not year_expense.empty:
-                    year_expense[expense_cols].to_csv(DATA_DIR / f"{year}_All_Checking_Spending.csv", index=False)
-                    all_yearly_checking_spending.append(year_expense[expense_cols])
-                    print(f"  {year} Checking Expenses: {len(year_expense)} transactions, ${year_expense['Net_Amount'].sum():,.2f}")
-
-            if all_yearly_checking_spending:
-                combined_checking = pd.concat(all_yearly_checking_spending, ignore_index=True).drop_duplicates()
-                combined_checking.to_csv(DATA_DIR / "all_checking_spending.csv", index=False)
-                print(f"\nCombined: {len(combined_checking)} total checking expense transactions")
+            export_yearly_and_combined(
+                ck_expense, expense_years, expense_cols,
+                '_All_Checking_Spending.csv', 'all_checking_spending.csv'
+            )
 
     print("\n" + "-" * 30)
     print("--- Budget Processing Complete ---")
+
 
 if __name__ == "__main__":
     main()

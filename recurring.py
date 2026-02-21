@@ -1,10 +1,6 @@
 import pandas as pd
 
-
-MONTH_NAMES = {
-    1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-    7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec'
-}
+from config import MONTH_NAMES
 
 
 def _get_longest_consecutive_run(month_numbers):
@@ -22,12 +18,13 @@ def _get_longest_consecutive_run(month_numbers):
     return max_run
 
 
-def detect_recurring_merchants(df, amount_tolerance=2.0, min_consecutive_months=2):
+def detect_recurring_merchants(df, amount_tolerance=2.0, min_consecutive_months=2,
+                               max_monthly_frequency=2.0):
     """
     Detect merchants with consistent monthly charges.
 
     Criteria: same merchant in 2+ consecutive months, amount std <= tolerance,
-    avg transactions per month <= 2 (filters out frequent shopping).
+    avg transactions per month <= max_monthly_frequency (filters out frequent shopping).
 
     Returns DataFrame with columns: Clean_Description, Budget_Category,
     Monthly_Amount, Months_Active, Consecutive_Months, Active_Range,
@@ -69,7 +66,7 @@ def detect_recurring_merchants(df, amount_tolerance=2.0, min_consecutive_months=
             continue
 
         # Filter out frequent shopping (e.g. Costco groceries 3x/month)
-        if group['tx_count'].mean() > 2.0:
+        if group['tx_count'].mean() > max_monthly_frequency:
             continue
 
         median_amount = group['monthly_total'].median()
@@ -105,10 +102,16 @@ def classify_transactions(df, recurring_merchants_df):
     return df
 
 
-def detect_subscription_changes(df, amount_tolerance=2.0):
+def detect_subscription_changes(df, amount_tolerance=2.0, min_consecutive_months=2,
+                                price_change_threshold=5.0):
     """
     Detect new subscriptions, cancellations, and price changes by comparing
     the earlier half vs recent half of available months.
+
+    Args:
+        amount_tolerance: Std-dev tolerance for recurring detection.
+        min_consecutive_months: Minimum consecutive months for recurring detection.
+        price_change_threshold: Absolute dollar change to flag as a price change.
 
     Returns list of dicts: {type, merchant, detail, old_amount, new_amount}.
     """
@@ -119,7 +122,7 @@ def detect_subscription_changes(df, amount_tolerance=2.0):
     df['month_num'] = df['Transaction Date'].dt.month
     available_months = sorted(df['month_num'].unique())
 
-    if len(available_months) < 3:
+    if len(available_months) < (min_consecutive_months * 2):
         return []
 
     midpoint = len(available_months) // 2
@@ -127,10 +130,10 @@ def detect_subscription_changes(df, amount_tolerance=2.0):
     recent_months = set(available_months[midpoint:])
 
     earlier_recurring = detect_recurring_merchants(
-        df[df['month_num'].isin(earlier_months)], amount_tolerance
+        df[df['month_num'].isin(earlier_months)], amount_tolerance, min_consecutive_months
     )
     recent_recurring = detect_recurring_merchants(
-        df[df['month_num'].isin(recent_months)], amount_tolerance
+        df[df['month_num'].isin(recent_months)], amount_tolerance, min_consecutive_months
     )
 
     earlier_names = set(earlier_recurring['Clean_Description']) if not earlier_recurring.empty else set()
@@ -165,7 +168,7 @@ def detect_subscription_changes(df, amount_tolerance=2.0):
         old_row = earlier_recurring[earlier_recurring['Clean_Description'] == merchant].iloc[0]
         new_row = recent_recurring[recent_recurring['Clean_Description'] == merchant].iloc[0]
         diff = new_row['Monthly_Amount'] - old_row['Monthly_Amount']
-        if abs(diff) > amount_tolerance:
+        if abs(diff) > price_change_threshold:
             change_type = 'price_increase' if diff > 0 else 'price_decrease'
             alerts.append({
                 'type': change_type,
