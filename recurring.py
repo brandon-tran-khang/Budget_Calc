@@ -42,20 +42,40 @@ def detect_recurring_merchants(df, amount_tolerance=2.0, min_consecutive_months=
         return pd.DataFrame(columns=result_cols)
 
     df = df.copy()
-    df['month_num'] = df['Transaction Date'].dt.month
+    
+    # FIX: Include Year so Jan 2025 and Jan 2026 are treated distinctly
+    df['year_month'] = df['Transaction Date'].dt.to_period('M')
 
     # Aggregate to monthly totals per merchant
-    monthly = df.groupby(['Clean_Description', 'month_num']).agg(
+    monthly = df.groupby(['Clean_Description', 'year_month']).agg(
         monthly_total=('Net_Amount', 'sum'),
         tx_count=('Net_Amount', 'count')
     ).reset_index()
 
     results = []
     for merchant, group in monthly.groupby('Clean_Description'):
-        months_list = sorted(group['month_num'].tolist())
+        # Sort by year_month chronologically
+        group = group.sort_values('year_month')
+        
+        # Calculate consecutive runs based on sequential periods
+        months_list = group['year_month'].tolist()
         months_active = len(months_list)
 
         if months_active < min_consecutive_months:
+            continue
+
+        # Check if they are consecutive (e.g., 2026-01, 2026-02)
+        consecutive = 1
+        max_run = 1
+        for i in range(1, len(months_list)):
+            if months_list[i] == months_list[i-1] + 1:
+                consecutive += 1
+            else:
+                max_run = max(max_run, consecutive)
+                consecutive = 1
+        max_run = max(max_run, consecutive)
+        
+        if max_run < min_consecutive_months:
             continue
 
         consecutive = _get_longest_consecutive_run(months_list)
@@ -75,7 +95,7 @@ def detect_recurring_merchants(df, amount_tolerance=2.0, min_consecutive_months=
         median_amount = group['monthly_total'].median()
         top_category = df.loc[df['Clean_Description'] == merchant, 'Budget_Category'].mode()
         category = top_category.iloc[0] if not top_category.empty else 'Personal'
-        active_range = ', '.join(MONTH_NAMES[m] for m in months_list)
+        active_range = ', '.join(MONTH_NAMES[m.month] for m in months_list)
 
         results.append({
             'Clean_Description': merchant,

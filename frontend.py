@@ -150,6 +150,33 @@ def load_data():
         st.error("Data files not found. Please run 'Yearly_Spending.py' first.")
         return pd.DataFrame(), pd.DataFrame()
 
+    # Apply Workflow Assigned Zelle Offsets directly to the transactions
+    assignments_path = directory / "zelle_assignments.csv"
+    if assignments_path.exists() and not df_trans.empty:
+        try:
+            df_assigned = pd.read_csv(assignments_path)
+            if not df_assigned.empty:
+                df_assigned['Transaction Date'] = pd.to_datetime(df_assigned['Transaction Date'])
+                
+                df_assigned_formatted = pd.DataFrame({
+                    'Transaction Date': df_assigned['Transaction Date'],
+                    'Clean_Description': 'Reimbursement: ' + df_assigned['Clean_Description'].str.title(),
+                    'Category': 'Transfer',
+                    'Budget_Category': df_assigned['Budget_Category'],
+                    # Force the amount to be negative so it always subtracts from total spending
+                    'Net_Amount': -abs(df_assigned['Net_Amount']),  
+                    'Source': 'Checking Assignment',
+                    'account_type': 'credit',
+                    'Month': df_assigned['Transaction Date'].dt.strftime('%B'),
+                    'Quarter': df_assigned['Transaction Date'].dt.quarter,
+                    'Week': df_assigned['Transaction Date'].dt.isocalendar().week,
+                    'Year': df_assigned['Transaction Date'].dt.year
+                })
+                # Append offsets to main transactions
+                df_trans = pd.concat([df_trans, df_assigned_formatted], ignore_index=True)
+        except pd.errors.EmptyDataError:
+            pass
+
     return df_trans, df_payments
 
 @st.cache_data
@@ -288,9 +315,9 @@ with col4:
 st.markdown("---")
 
 # --- Tabs for different views ---
-tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy, tab_recurring, tab_cashflow, tab_manage = st.tabs(
+tab_overview, tab_vendor, tab_transactions, tab_forecast, tab_yoy, tab_recurring, tab_cashflow, tab_manage, tab_reimburse = st.tabs(
     ["📊 Overview", "🛍️ Vendor Analysis", "📋 Transactions", "🔮 Forecasting",
-     "📈 Year Comparison", "🔄 Recurring", "💰 Income & Cash Flow", "⚙️ Manage Categories"])
+     "📈 Year Comparison", "🔄 Recurring", "💰 Income & Cash Flow", "⚙️ Manage Categories", "🤝 Reimbursements"])
 
 # TAB 1: OVERVIEW
 with tab_overview:
@@ -299,7 +326,8 @@ with tab_overview:
     with col_chart1:
         st.subheader("Spending Trend Over Time")
         time_group = df_filtered.groupby('Transaction Date')['Net_Amount'].sum().reset_index()
-        time_group['Net_Amount'] = abs(time_group['Net_Amount'])
+        # Fix abs() issue so reimbursements reflect properly as a net drop
+        # time_group['Net_Amount'] = abs(time_group['Net_Amount']) <- REMOVED to allow negative net days
 
         fig_trend = px.line(time_group, x='Transaction Date', y='Net_Amount',
                             markers=True, line_shape='spline')
@@ -311,6 +339,7 @@ with tab_overview:
         st.subheader("Category Split")
         # UPDATED: Pi chart now uses Budget_Category
         cat_group = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().reset_index()
+        # The clip(lower=0) natively handles cases where reimbursements > spending in a category
         cat_group['Net_Amount'] = cat_group['Net_Amount'].clip(lower=0)
 
         fig_pie = px.pie(cat_group, values='Net_Amount', names='Budget_Category', hole=0.6,
@@ -336,9 +365,13 @@ with tab_overview:
         with col_fv2:
             st.metric("Variable / Discretionary", f"${variable_total:,.2f}", f"{variable_pct:.1f}% of total")
         with col_fv3:
+            # Prevent graphing negative values in pie chart if variable total drops below 0 due to heavy offset
+            graph_fixed = max(0, fixed_total)
+            graph_var = max(0, variable_total)
+            
             fv_data = pd.DataFrame({
                 'Type': ['Fixed', 'Variable'],
-                'Amount': [fixed_total, variable_total]
+                'Amount': [graph_fixed, graph_var]
             })
             fig_fv = px.pie(fv_data, values='Amount', names='Type', hole=0.65,
                             color='Type',
@@ -371,7 +404,7 @@ with tab_overview:
         )
         st.plotly_chart(fig_stacked, use_container_width=True)
 
-# TAB 2: VENDOR ANALYSIS (No changes needed, uses merchant name)
+# TAB 2: VENDOR ANALYSIS
 with tab_vendor:
     st.subheader("Where does the money actually go?")
     col_v1, col_v2 = st.columns([2, 1])
@@ -406,7 +439,7 @@ with tab_transactions:
             "Net_Amount": st.column_config.NumberColumn(
                 "Amount",
                 format="$%.2f",
-                help="Net spending amount"
+                help="Net spending amount (Negative indicates a reimbursement)"
             ),
         },
         use_container_width=True,
@@ -462,7 +495,7 @@ with tab_forecast:
             name='Projection', line=dict(dash='dot', color='gray')))
 
     actual_cum = df_year.sort_values('Transaction Date').set_index('Transaction Date')['Net_Amount'].cumsum()
-    actual_cum_resampled = actual_cum.resample('M').last()
+    actual_cum_resampled = actual_cum.resample('ME').last()
 
     fig_proj.add_trace(go.Scatter(
         x=actual_cum_resampled.index, y=actual_cum_resampled.values,
@@ -949,3 +982,120 @@ with tab_manage:
         )
     else:
         st.info("No mappings file found. Run Yearly_Spending.py to create the initial mappings file.")
+
+# TAB 9: LOG REIMBURSEMENTS (NEW)
+# TAB 9: LOG REIMBURSEMENTS (NEW WORKFLOW)
+with tab_reimburse:
+    st.subheader("Assign Incoming Transfers to Expenses")
+    st.caption("Review incoming Zelle/Venmo transfers from your checking account and assign them to offset specific budget categories. This automatically reduces your top-line spending for those categories.")
+
+    # 1. Gather all potential incoming transfers (Checking deposits + Income)
+    candidates = pd.DataFrame()
+    if not df_income_year.empty:
+        candidates = pd.concat([candidates, df_income_year], ignore_index=True)
+    if not df_checking_year.empty:
+        candidates = pd.concat([candidates, df_checking_year], ignore_index=True)
+
+    if not candidates.empty:
+        # Filter for Zelle/Venmo that are DEPOSITS (Amount > 0)
+        mask = candidates['Clean_Description'].str.contains('ZELLE|VENMO|CASH APP', case=False, na=False)
+        positive_cashflow = candidates['Net_Amount'] > 0
+        zelle_tx = candidates[mask & positive_cashflow].copy()
+
+        # 2. Deduplicate and filter out already assigned transactions
+        zelle_tx = zelle_tx.drop_duplicates(subset=['Transaction Date', 'Clean_Description', 'Net_Amount'])
+        
+        assignments_file = Path(__file__).resolve().parent / "Data" / "zelle_assignments.csv"
+        
+        if not zelle_tx.empty:
+            if assignments_file.exists():
+                assigned_df = pd.read_csv(assignments_file)
+                if not assigned_df.empty:
+                    # Create exact string dates for safe merging
+                    zelle_tx['merge_date'] = pd.to_datetime(zelle_tx['Transaction Date']).dt.strftime('%Y-%m-%d')
+                    assigned_df['merge_date'] = pd.to_datetime(assigned_df['Transaction Date']).dt.strftime('%Y-%m-%d')
+
+                    merged = zelle_tx.merge(
+                        assigned_df[['merge_date', 'Clean_Description', 'Net_Amount']], 
+                        on=['merge_date', 'Clean_Description', 'Net_Amount'], 
+                        how='left', indicator=True
+                    )
+                    unassigned = merged[merged['_merge'] == 'left_only'].drop(columns=['_merge', 'merge_date'])
+                else:
+                    unassigned = zelle_tx
+            else:
+                unassigned = zelle_tx
+        else:
+            unassigned = pd.DataFrame()
+
+        # 3. UI for Bulk Assignment
+        if unassigned.empty:
+            st.success("🎉 All incoming Zelle/Venmo transactions for this year have been mapped!")
+        else:
+            st.markdown("#### Unassigned Incoming Transfers")
+            unassigned['Offset_Category'] = "Select Category..."
+            
+            # Format date for data editor
+            unassigned['Transaction Date'] = pd.to_datetime(unassigned['Transaction Date']).dt.date
+            
+            display_cols = ['Transaction Date', 'Clean_Description', 'Net_Amount', 'Offset_Category']
+
+            edited_df = st.data_editor(
+                unassigned[display_cols].reset_index(drop=True),
+                column_config={
+                    "Transaction Date": st.column_config.DateColumn("Date", disabled=True),
+                    "Clean_Description": st.column_config.TextColumn("Description", disabled=True),
+                    "Net_Amount": st.column_config.NumberColumn("Amount", format="$%.2f", disabled=True),
+                    "Offset_Category": st.column_config.SelectboxColumn(
+                        "Assign to Category",
+                        options=["Select Category..."] + sorted(BUDGET_CATEGORIES)
+                    )
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+
+            if st.button("Save Assignments", type="primary"):
+                # Grab only the rows where the user actually made a selection
+                to_assign = edited_df[edited_df['Offset_Category'] != "Select Category..."].copy()
+                
+                if not to_assign.empty:
+                    to_assign = to_assign.rename(columns={'Offset_Category': 'Budget_Category'})
+                    
+                    if assignments_file.exists():
+                        to_assign.to_csv(assignments_file, mode='a', header=False, index=False)
+                    else:
+                        to_assign.to_csv(assignments_file, index=False)
+                        
+                    st.toast(f"Successfully assigned {len(to_assign)} transactions!")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.warning("Please select a category for at least one transaction before saving.")
+    else:
+        st.info("No checking or income data found for this year. Make sure your checking CSVs are loaded.")
+        
+    # 4. View Assignment History
+    st.markdown("---")
+    st.markdown("#### Assignment History")
+    assignments_file = Path(__file__).resolve().parent / "Data" / "zelle_assignments.csv"
+    if assignments_file.exists():
+        history_df = pd.read_csv(assignments_file)
+        if not history_df.empty:
+            st.dataframe(
+                history_df.sort_values('Transaction Date', ascending=False),
+                column_config={
+                    "Transaction Date": st.column_config.DateColumn("Date", format="YYYY-MM-DD"),
+                    "Net_Amount": st.column_config.NumberColumn("Amount", format="$%.2f"),
+                    "Budget_Category": st.column_config.TextColumn("Offset Category"),
+                    "Clean_Description": st.column_config.TextColumn("Description")
+                },
+                use_container_width=True,
+                hide_index=True,
+                height=300
+            )
+        else:
+             st.info("No reimbursements logged yet.")
+    else:
+        st.info("No reimbursements logged yet.")
+
