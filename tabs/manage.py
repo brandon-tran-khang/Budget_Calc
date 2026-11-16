@@ -3,12 +3,12 @@
 import streamlit as st
 import pandas as pd
 from config import BUDGET_CATEGORIES, MAPPINGS_FILE
+from ui import receipt, section
 
 
 def render(df_trans, mappings_dict, save_category_mappings):
-    st.subheader("Category Mapping Manager")
     st.caption("Review and assign budget categories to merchants. "
-               "Merchants not in the mappings file are flagged as unreviewed.")
+            "Merchants not in the mappings file are flagged as unreviewed.")
 
     df_trans = df_trans[df_trans['Source'] != 'Checking Assignment']  # reimbursement offsets aren't merchants
 
@@ -41,6 +41,9 @@ def render(df_trans, mappings_dict, save_category_mappings):
     unreviewed_df['Budget_Category'] = unreviewed_df['Budget_Category'].fillna('Personal')
 
     # Metrics
+    n_personal = int((unreviewed_df['Budget_Category'] == 'Personal').sum())
+    if n_personal:
+        st.badge(f"{n_personal} merchants still in Personal", icon=":material/checklist:", color="orange")
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1:
         st.metric("Unreviewed Merchants", len(unreviewed_df))
@@ -49,13 +52,10 @@ def render(df_trans, mappings_dict, save_category_mappings):
     with col_m3:
         st.metric("Total Unique Merchants", len(all_combos))
 
-    st.markdown("---")
-
     if unreviewed_df.empty:
-        st.success("All merchants have been reviewed and mapped!")
+        st.success("All merchants have been reviewed and mapped. New merchants from future imports will appear here.")
     else:
-        st.markdown("#### Unreviewed Merchants")
-        st.caption("Assign a budget category to each merchant, then click Save.")
+        section("Unreviewed Merchants", "Assign a budget category to each merchant, then click Save.")
 
         edited_df = st.data_editor(
             unreviewed_df.reset_index(drop=True),
@@ -76,17 +76,17 @@ def render(df_trans, mappings_dict, save_category_mappings):
             key="mapping_editor"
         )
 
-        if st.button("Save Mappings", type="primary"):
+        if st.button("Save mappings", type="primary", icon=":material/save:"):
             new_mappings_df = edited_df[['Clean_Description', 'Category', 'Budget_Category']].rename(
                 columns={'Category': 'Bank_Category'}
             )
             save_category_mappings(new_mappings_df)
+            receipt(f"Saved {len(new_mappings_df)} merchant mappings")
             st.cache_data.clear()
             st.rerun()
 
     # Reference: show existing mappings
-    st.markdown("---")
-    st.markdown("#### Current Mapping Table")
+    section("Current Mapping Table")
     if MAPPINGS_FILE.exists():
         existing_mappings = pd.read_csv(MAPPINGS_FILE)
         st.dataframe(

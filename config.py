@@ -67,3 +67,18 @@ REIMBURSEMENTS_FILE = DATA_DIR / "zelle_assignments.csv"
 DEFAULT_TAGS = [
     "Tax Deductible", "Reimbursable", "Gift", "Business", "Impulse Buy", "Split Cost"
 ]
+
+# --- Category colors (envelope stock families; see docs/UI_SPEC.md) ---
+CATEGORY_COLORS = {
+    "Groceries": "#D9A21B", "Restaurants": "#E0674F",
+    "Gas": "#4F8FC0", "Car Maintenance": "#3D6E99", "Car Registration": "#7FB0D6",
+    "Home Electricity": "#5BAE8C", "Home Water/Trash": "#3F8F6E", "Internet": "#2F7A62",
+    "Phone Bill": "#7CC2A3", "HOA Bill": "#6B4E8C", "Home Maintenance": "#6E9F5A",
+    "Home Furniture": "#93B36B", "Pest control": "#A3C08A", "Landscaping": "#5E8C3F",
+    "Discord Subscription": "#6C7A86", "Spotify Subscription": "#55636E",
+    "Amazon Prime Subscription": "#8593A0", "Gym Membership": "#9AA6B0",
+    "Chase Sapphire Preferred Fee": "#46525C", "Costco Membership": "#B0BAC2",
+    "Health / Doctors": "#D46A8C", "Games": "#8C7BC4", "Vacation": "#B49BE0",
+    "Personal": "#A88B6A", "Investments": "#2C5F6E",
+}
+CATEGORY_FALLBACK_COLOR = "#7A8580"

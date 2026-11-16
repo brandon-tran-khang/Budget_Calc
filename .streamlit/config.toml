@@ -1,0 +1,62 @@
+[server]
+enableStaticServing = true
+address = "127.0.0.1"
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+font = "Public Sans, sans-serif"
+headingFont = "Public Sans, sans-serif"
+baseRadius = "6px"
+chartCategoricalColors = ["#1F6B4F", "#D9A21B", "#4F8FC0", "#E0674F", "#8C7BC4", "#5BAE8C", "#D46A8C", "#7A8580"]
+
+[[theme.fontFaces]]
+family = "Public Sans"
+url = "app/static/fonts/public-sans-latin-400-normal.woff2"
+weight = "400"
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Public Sans"
+url = "app/static/fonts/public-sans-latin-600-normal.woff2"
+weight = "600"
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Public Sans"
+url = "app/static/fonts/public-sans-latin-800-normal.woff2"
+weight = "800"
+style = "normal"
+
+[theme.light]
+primaryColor = "#1F6B4F"
+backgroundColor = "#F4F6F2"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#17201B"
+borderColor = "#DDE3DB"
+redColor = "#B3261E"
+greenColor = "#2E7D5B"
+
+[theme.light.sidebar]
+backgroundColor = "#1F4D3A"
+secondaryBackgroundColor = "#17402F"
+textColor = "#E4EFE8"
+primaryColor = "#5BAE8C"
+borderColor = "#3B6A55"
+
+[theme.dark]
+primaryColor = "#2E7D5B"
+backgroundColor = "#101714"
+secondaryBackgroundColor = "#18221D"
+textColor = "#E6EDE8"
+borderColor = "#2A3830"
+redColor = "#F2867E"
+greenColor = "#6CC49C"
+
+[theme.dark.sidebar]
+backgroundColor = "#0F2A20"
+secondaryBackgroundColor = "#0A1F17"
+textColor = "#D5E6DC"
+primaryColor = "#5BAE8C"
+borderColor = "#2A4A3A"

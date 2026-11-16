@@ -7,62 +7,18 @@ from transaction_notes import (
     add_tx_keys, load_notes, merge_notes, get_available_tags, filter_by_tags,
 )
 from reimbursements import load_assignments, assignments_as_offsets, remove_assigned_from_income
+import ui
 from tabs import (overview, vendor, transactions, forecasting, year_comparison, recurring_tab, cashflow, manage,
                   reimbursements as reimbursements_tab)
 
 # --- Page Configuration (Must be first) ---
 st.set_page_config(
-    page_title="Finance Dashboard",
-    page_icon="\U0001f4b3",
+    page_title="Budget Calc",
+    page_icon=":material/savings:",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="auto"
 )
-
-# --- Modern "Fintech" UI Styling ---
-st.markdown("""
-    <style>
-    html, body, [class*="css"] {
-        font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
-    }
-    div[data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        border: 1px solid #E0E0E0;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.02);
-    }
-    div[data-testid="stMetric"] label {
-        color: #000000 !important;
-        font-weight: 600;
-    }
-    div[data-testid="stMetric"] div {
-        color: #000000 !important;
-    }
-    .block-container {
-        padding-top: 2rem;
-    }
-    h1, h2, h3 {
-        color: #1E293B;
-        font-weight: 700;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 20px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
-        background-color: white;
-        border-radius: 4px;
-        color: #64748B;
-        font-weight: 600;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #F1F5F9;
-        color: #0F172A;
-        border-bottom: 2px solid #3B82F6;
-    }
-    </style>
-""", unsafe_allow_html=True)
+ui.inject_css()
 
 # --- Helpers (kept here because they use @st.cache_data) ---
 
@@ -323,8 +279,8 @@ def generate_html_summary(df_filtered, df_income_year, selected_year, selected_m
                 <td style="padding:8px 12px;border:1px solid #ddd;">{rate:.1f}% (${net:,.2f} saved)</td></tr>"""
     period = f"{selected_month} {selected_year}" if selected_month != 'All' else str(selected_year)
     top_cats_html = "<br>".join(top_cats) if top_cats else "N/A"
-    return f"""<table style="border-collapse:collapse;font-family:Arial,sans-serif;max-width:500px;">
-  <tr style="background:#1E293B;color:white;">
+    return f"""<table style="border-collapse:collapse;font-family:'Public Sans',Helvetica,sans-serif;max-width:500px;">
+  <tr style="background:#1F4D3A;color:white;">
     <th colspan="2" style="padding:12px;text-align:left;font-size:16px;">Spending Summary \u2014 {period}</th>
   </tr>
   <tr><td style="padding:8px 12px;border:1px solid #ddd;font-weight:600;">Total Spent</td>
@@ -429,12 +385,12 @@ if df_trans.empty:
 
 # --- Sidebar Filters ---
 with st.sidebar:
-    st.header("Filters")
+    st.markdown('<div class="bc-flabel">Filters</div>', unsafe_allow_html=True)
 
     available_years = sorted(df_trans['Year'].unique().tolist(), reverse=True)
     current_year = datetime.date.today().year
     default_year_index = available_years.index(current_year) if current_year in available_years else 0
-    selected_year = st.selectbox("Select Year", available_years, index=default_year_index)
+    selected_year = st.selectbox("Year", available_years, index=default_year_index)
 
     df_year = df_trans[df_trans['Year'] == selected_year].copy()
     df_income_year = df_income[df_income['Year'] == selected_year].copy() if not df_income.empty else pd.DataFrame()
@@ -458,11 +414,11 @@ with st.sidebar:
         df_checking_year = classify_transactions(df_checking_year, recurring_merchants)
 
     months = ['All'] + sorted(df_year['Month'].unique().tolist(), key=lambda m: datetime.datetime.strptime(m, "%B").month)
-    selected_month = st.selectbox("Select Month", months)
+    selected_month = st.selectbox("Month", months)
     categories = ['All'] + sorted(df_year['Budget_Category'].unique().tolist())
-    selected_category = st.selectbox("Select Budget Category", categories)
+    selected_category = st.selectbox("Category", categories)
     available_tags = get_available_tags(notes_df)
-    selected_tags = st.multiselect("Filter by Tags", available_tags)
+    selected_tags = st.multiselect("Tags", available_tags)
     include_investments = st.checkbox("Include Investments", value=True,
                                       help="Brokerage transfers (Schwab, Wealthfront) count as spending in the 'Investments' category. Uncheck to hide them.")
     if not include_investments:
@@ -470,8 +426,7 @@ with st.sidebar:
         if not df_checking_year.empty:
             df_checking_year = df_checking_year[df_checking_year['Budget_Category'] != 'Investments']
 
-    st.markdown("---")
-    st.caption(f"Last Updated: {datetime.date.today()}")
+    st.caption(f"Last updated: {df_trans['Transaction Date'].max().date()}")
 
 # Apply Filters
 df_filtered = df_year.copy()
@@ -482,16 +437,6 @@ if selected_category != 'All':
 if selected_tags:
     df_filtered = filter_by_tags(df_filtered, selected_tags)
 
-# --- Header + Top Metrics ---
-
-st.title(f"\U0001f4b8 {selected_year} Spending Command Center")
-st.markdown("Taking control of personal finances, one data point at a time.")
-st.markdown("<br>", unsafe_allow_html=True)
-
-col1, col2, col3, col4 = st.columns(4)
-total_spend = df_filtered['Net_Amount'].sum()
-tx_count = len(df_filtered)
-
 total_payments_made = 0
 if not df_payments.empty and 'Year' in df_payments.columns:
     pay_view = df_payments[df_payments['Year'] == selected_year].copy()
@@ -499,54 +444,47 @@ if not df_payments.empty and 'Year' in df_payments.columns:
         pay_view = pay_view[pay_view['Month'] == selected_month]
     total_payments_made = pay_view['Amount'].sum()
 
-with col1:
-    st.metric("Total Spending", f"${total_spend:,.2f}")
-with col2:
-    st.metric("Transactions", f"{tx_count}")
-with col3:
-    if not df_filtered.empty:
-        top_cat = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().idxmax()
-        top_cat_amount = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().max()
-        st.metric("Top Category", top_cat, f"${top_cat_amount:,.0f}")
-    else:
-        st.metric("Top Category", "N/A", "$0")
-with col4:
-    st.metric("Card Payments Made", f"${total_payments_made:,.2f}",
-              help="Payments to credit card balance (excluded from spending)")
 
-st.markdown("---")
+# --- Navigation ---
 
-# --- Tab Routing ---
-tab_ov, tab_ve, tab_tx, tab_fc, tab_yy, tab_rc, tab_cf, tab_mg, tab_rb = st.tabs(
-    ["\U0001f4ca Overview", "\U0001f6cd\ufe0f Vendor Analysis", "\U0001f4cb Transactions", "\U0001f52e Forecasting",
-     "\U0001f4c8 Year Comparison", "\U0001f504 Recurring", "\U0001f4b0 Income & Cash Flow", "\u2699\ufe0f Manage Categories", "\U0001f91d Reimbursements"])
+def _page(title, render):
+    """Wrap a tab render so non-Overview pages get the compact context line and a title."""
+    def run():
+        st.title(title)
+        ui.context_line(selected_year, selected_month, selected_category, include_investments)
+        render()
+    return run
 
-with tab_ov:
+
+def _overview():
     overview.render(df_filtered, df_year, df_trans, df_income_year, selected_year, selected_month,
-                    generate_monthly_summary_csv, generate_html_summary)
+                    generate_monthly_summary_csv, generate_html_summary, card_payments=total_payments_made)
 
-with tab_ve:
-    vendor.render(df_filtered)
 
-with tab_tx:
-    transactions.render(df_filtered, df_trans, notes_df, selected_year, selected_month, selected_category,
-                        generate_filtered_transactions_csv, save_category_mappings)
+def _pg(title, icon, path, render):
+    return st.Page(_page(title, render), title=title, icon=f":material/{icon}:", url_path=path)
 
-with tab_fc:
-    forecasting.render(df_year, df_income_year, df_checking_year, selected_year,
-                       generate_annual_summary_csv)
 
-with tab_yy:
-    year_comparison.render(df_trans)
-
-with tab_rc:
-    recurring_tab.render(df_year, recurring_merchants, subscription_alerts)
-
-with tab_cf:
-    cashflow.render(df_year, df_income_year, df_checking_year)
-
-with tab_mg:
-    manage.render(df_trans, mappings_dict, save_category_mappings)
-
-with tab_rb:
-    reimbursements_tab.render(df_income_raw_year, assigned_df, selected_year)
+pages = {
+    "Review": [
+        st.Page(_overview, title="Overview", icon=":material/dashboard:", default=True),
+        _pg("Vendors", "storefront", "vendors", lambda: vendor.render(df_filtered)),
+        _pg("Year Comparison", "compare_arrows", "year-comparison", lambda: year_comparison.render(df_trans)),
+        _pg("Forecast", "trending_up", "forecast", lambda: forecasting.render(
+            df_year, df_income_year, df_checking_year, selected_year, generate_annual_summary_csv)),
+    ],
+    "Money flow": [
+        _pg("Cash Flow", "payments", "cash-flow", lambda: cashflow.render(df_year, df_income_year, df_checking_year)),
+        _pg("Recurring", "autorenew", "recurring", lambda: recurring_tab.render(
+            df_year, recurring_merchants, subscription_alerts)),
+    ],
+    "Clean up": [
+        _pg("Transactions", "receipt_long", "transactions", lambda: transactions.render(
+            df_filtered, df_trans, notes_df, selected_year, selected_month, selected_category,
+            generate_filtered_transactions_csv, save_category_mappings)),
+        _pg("Reimbursements", "currency_exchange", "reimbursements", lambda: reimbursements_tab.render(
+            df_income_raw_year, assigned_df, selected_year)),
+        _pg("Categories", "category", "categories", lambda: manage.render(df_trans, mappings_dict, save_category_mappings)),
+    ],
+}
+st.navigation(pages, position="sidebar").run()

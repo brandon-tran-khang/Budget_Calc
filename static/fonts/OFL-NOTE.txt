@@ -1,0 +1,4 @@
+Public Sans (weights 400, 600, 800, latin subset), woff2 files from the npm package
+@fontsource/public-sans@5.1.0 (https://cdn.jsdelivr.net/npm/@fontsource/public-sans@5.1.0/).
+Original design: USWDS / GSA, https://github.com/uswds/public-sans.
+License: SIL Open Font License 1.1 (https://openfontlicense.org). Free to use, embed and redistribute with this notice.

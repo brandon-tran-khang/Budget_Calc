@@ -3,11 +3,11 @@
 import streamlit as st
 import plotly.express as px
 from config import MONTH_NAMES
-from chart_helpers import apply_default_layout, make_pie_chart
+from ui import section, envelopes
+from chart_helpers import apply_default_layout
 
 
 def render(df_year, recurring_merchants, subscription_alerts):
-    st.subheader("Recurring Expenses & Subscriptions")
     st.caption("Auto-detected charges that appear monthly with consistent amounts.")
 
     if recurring_merchants.empty:
@@ -30,27 +30,23 @@ def render(df_year, recurring_merchants, subscription_alerts):
     with col_r3:
         st.metric("% of Spending (Recurring)", f"{recurring_pct:.1f}%")
 
-    st.markdown("---")
-
     # Subscription Change Alerts
     if subscription_alerts:
-        st.markdown("#### Subscription Changes Detected")
+        section("Subscription Changes Detected")
+        labels = {'new': ('New', 'green'), 'cancelled': ('Cancelled', 'orange'),
+                  'price_increase': ('Price up', 'red'), 'price_decrease': ('Price down', 'blue')}
         for alert in subscription_alerts:
-            if alert['type'] == 'new':
-                st.success(f"**{alert['merchant']}** — {alert['detail']}")
-            elif alert['type'] == 'cancelled':
-                st.warning(f"**{alert['merchant']}** — {alert['detail']}")
-            elif alert['type'] == 'price_increase':
-                st.error(f"**{alert['merchant']}** — {alert['detail']}")
-            elif alert['type'] == 'price_decrease':
-                st.info(f"**{alert['merchant']}** — {alert['detail']}")
-        st.markdown("---")
+            if alert['type'] in labels:
+                text, color = labels[alert['type']]
+                with st.container(horizontal=True, vertical_alignment="center"):
+                    st.badge(text, color=color)
+                    st.markdown(f"**{alert['merchant']}** — {alert['detail']}")
 
     # Main Content: Table + Chart
     col_rt1, col_rt2 = st.columns([2, 1])
 
     with col_rt1:
-        st.markdown("#### All Recurring Charges")
+        section("All Recurring Charges")
         display_df = recurring_merchants[[
             'Clean_Description', 'Monthly_Amount', 'Budget_Category',
             'Months_Active', 'Active_Range', 'Annual_Projected'
@@ -72,16 +68,14 @@ def render(df_year, recurring_merchants, subscription_alerts):
         )
 
     with col_rt2:
-        st.markdown("#### Recurring by Category")
+        section("Recurring by Category")
         cat_recurring = recurring_merchants.groupby('Budget_Category')['Monthly_Amount'].sum().reset_index()
-        fig_rec_pie = make_pie_chart(
-            cat_recurring, 'Monthly_Amount', 'Budget_Category',
-            color_discrete_sequence=px.colors.qualitative.Pastel
-        )
-        st.plotly_chart(fig_rec_pie, width='stretch')
+        cat_recurring = cat_recurring.sort_values('Monthly_Amount', ascending=False)
+        envelopes([{"category": c, "spent": a, "returned": 0, "net": a}
+                   for c, a in zip(cat_recurring['Budget_Category'], cat_recurring['Monthly_Amount'])])
 
     # Monthly Recurring Spend Trend
-    st.markdown("#### Monthly Recurring Spend")
+    section("Monthly Recurring Spend")
     recurring_tx = df_year[df_year['is_recurring']].copy()
     if not recurring_tx.empty:
         recurring_tx['month_num'] = recurring_tx['Transaction Date'].dt.month
@@ -91,7 +85,7 @@ def render(df_year, recurring_merchants, subscription_alerts):
         fig_rec_trend = px.bar(
             monthly_recurring, x='Month_Name', y='Net_Amount',
             labels={'Net_Amount': 'Recurring Spend ($)', 'Month_Name': 'Month'},
-            color_discrete_sequence=['#6366f1']
+            color_discrete_sequence=['#46525C']
         )
         apply_default_layout(fig_rec_trend, height=300)
         st.plotly_chart(fig_rec_trend, width='stretch')

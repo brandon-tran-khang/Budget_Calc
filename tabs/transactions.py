@@ -3,6 +3,7 @@
 import streamlit as st
 import pandas as pd
 from config import BUDGET_CATEGORIES
+from ui import receipt
 from transaction_notes import (
     load_notes, save_notes, compute_tag_totals, get_available_tags,
 )
@@ -10,13 +11,11 @@ from transaction_notes import (
 
 def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selected_category,
            generate_filtered_transactions_csv, save_category_mappings):
-    st.subheader("Detailed Transaction Log")
-
-    # Filter context
     st.caption(f"Showing {len(df_filtered):,} of {len(df_trans[df_trans['Year'] == selected_year]):,} transactions")
 
     # --- A. Global Search ---
-    search_query = st.text_input("Search transactions (all years)", placeholder="Search merchant, category, note, or tag...")
+    search_query = st.text_input("Search transactions (all years)", placeholder="Search merchant, category, note, or tag...",
+                                 icon=":material/search:")
     if search_query:
         q = search_query.lower()
         search_results = df_trans[
@@ -45,7 +44,6 @@ def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selec
                 height=400,
                 hide_index=True
             )
-        st.markdown("---")
 
     # --- B. Tag Summary Metrics ---
     tag_totals = compute_tag_totals(df_filtered)
@@ -55,19 +53,21 @@ def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selec
         for col, (tag_name, tag_amount) in zip(tag_cols, visible_tags):
             with col:
                 st.metric(tag_name, f"${tag_amount:,.2f}")
-        st.markdown("---")
 
     # --- B2. Filtered Transactions Download ---
     month_part = selected_month[:3] if selected_month != 'All' else 'All'
     cat_part = selected_category.replace(' ', '_').replace('/', '-') if selected_category != 'All' else 'All'
     tx_filename = f"Transactions_{selected_year}_{month_part}_{cat_part}.csv"
     tx_csv = generate_filtered_transactions_csv(df_filtered)
-    st.download_button(
-        f"Download Transactions ({len(df_filtered)} rows)",
-        data=tx_csv,
-        file_name=tx_filename,
-        mime="text/csv"
-    )
+    with st.container(horizontal=True, vertical_alignment="center"):
+        st.download_button(
+            f"Export CSV ({len(df_filtered)} rows)",
+            data=tx_csv,
+            file_name=tx_filename,
+            mime="text/csv",
+            icon=":material/download:",
+        )
+        save_clicked = st.button("Save changes", type="primary", icon=":material/save:")
 
     # --- C. Editable Transaction Table ---
     editor_df = df_filtered[['_tx_key', 'Transaction Date', 'Clean_Description', 'Category', 'Budget_Category', 'Net_Amount', 'Note', 'Tags']].copy()
@@ -98,7 +98,7 @@ def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selec
     )
 
     # --- D. Save Button ---
-    if st.button("Save Changes", type="primary"):
+    if save_clicked:
         changes_made = False
 
         # 1. Category changes
@@ -121,6 +121,9 @@ def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selec
                 })
             save_category_mappings(pd.DataFrame(new_mapping_rows))
             changes_made = True
+            first = new_mapping_rows[0]
+            receipt(f"Recategorized {first['Clean_Description']} → {first['Budget_Category']}"
+                    if len(new_mapping_rows) == 1 else f"Recategorized {len(new_mapping_rows)} transactions")
 
         # 2. Notes/Tags
         full_notes = load_notes()
@@ -130,6 +133,7 @@ def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selec
         combined_notes = pd.concat([other_notes, editor_notes], ignore_index=True)
         save_notes(combined_notes)
         changes_made = True
+        receipt(f"Saved notes for {len(editor_notes)} transactions")
 
         if changes_made:
             st.cache_data.clear()

@@ -16,6 +16,19 @@ Effect on real data: card rows 1305→1395 (+7 restored duplicates, +27 refunds,
 New modules: `reimbursements.py` (pure matching/offset logic, one-for-one occurrence-index matching), `tabs/reimbursements.py` (assign + history with remove), `tests/test_reimbursements.py`.
 The findings list below is the original 2026-11-16 evaluation, kept for history.
 
+## UI overhaul ("Cash Envelopes"), 2026-11-16
+Visual world chosen by the owner through impeccable. Contract: `.impeccable/surfaces/frontend-py.md`; spec: `docs/UI_SPEC.md`; tokens: `DESIGN.md`.
+- `frontend.py` now uses `st.navigation` grouped pages (Review / Money flow / Clean up) in place of `st.tabs`. The filters sit in the sidebar under the nav, and data prep still runs before `pg.run()`. Tab `render()` signatures are unchanged; `overview.render` gains `card_payments=`.
+- `ui.py` is the single home for presentation:
+  - CSS tokens are derived from `currentColor`, so they follow Streamlit's light/dark toggle.
+  - Components: `hero`, `envelopes`/`envelope_rows`, `receipt`/`receipts_panel`, `section`, `context_line`.
+- `config.CATEGORY_COLORS` gives one color per budget category, used in every chart and envelope.
+- `.streamlit/config.toml` holds the light/dark/sidebar themes and self-hosted Public Sans (`static/fonts`, OFL).
+- Every edit (category, notes, reimbursement assign/remove, mappings) calls `ui.receipt`, which raises a toast and logs to "Changes this session". Reimbursement removal needs a popover confirm.
+- Pie/donut charts were removed in favor of envelope rows and single-hue bars.
+- Future hooks: per-category budget limits (`budget` key on envelope rows), command palette, saved filter presets.
+
+
 ## Purpose
 Personal finance tracker for one user. It consolidates Chase/Citi credit-card CSV exports and Chase checking CSV exports,
 categorizes spending into 24 custom budget categories, tracks income/cash flow, detects recurring subscriptions, and shows
