@@ -19,7 +19,25 @@ class TestKeyGeneration:
         assert key == '2024-03-20::Amazon::29.99'
 
 
+    def test_amount_float_noise_and_int_same_key(self):
+        keys = {generate_tx_key('2024-01-15', 'Shop', a) for a in (5.25, 5.250000001, 5.2500)}
+        assert keys == {'2024-01-15::Shop::5.25'}
+        assert generate_tx_key('2024-01-15', 'Shop', 100) == generate_tx_key('2024-01-15', 'Shop', 100.0)
+
+
 class TestAddTxKeys:
+    def test_keys_independent_of_row_order(self):
+        df = pd.DataFrame({
+            'Transaction Date': pd.to_datetime(['2024-01-15'] * 2 + ['2024-01-16']),
+            'Clean_Description': ['Shop'] * 2 + ['Cafe'],
+            'Net_Amount': [5.25] * 2 + [1.0],
+            'Source': ['B', 'A', 'A'],
+        })
+        a = add_tx_keys(df)['_tx_key']
+        b = add_tx_keys(df.iloc[::-1])['_tx_key']
+        assert a.sort_index().tolist() == b.sort_index().tolist()
+        assert a.is_unique
+
     def test_unique_keys_for_duplicates(self, sample_transactions):
         """Phase 1a fix: duplicate transactions should get unique keys."""
         df = add_tx_keys(sample_transactions)
@@ -92,6 +110,18 @@ class TestSaveLoadRoundTrip:
 
         loaded = load_notes()
         assert loaded.iloc[0]['_tx_key'] == '2024-01-15::Starbucks::5.25::0'
+
+
+    def test_old_repr_amounts_migrated(self, tmp_path, monkeypatch):
+        notes_file = tmp_path / "test_notes.csv"
+        monkeypatch.setattr(config, "NOTES_FILE", notes_file)
+        pd.DataFrame({
+            '_tx_key': ['2024-01-15::Shop::12.5::0', '2024-01-15::A::B::100.0::0', '2024-01-16::Shop::100.0', '2024-01-15::Shop::n/a::0'],
+            'Note': ['a', 'b', 'd', 'c'],
+            'Tags': ['', '', '', ''],
+        }).to_csv(notes_file, index=False)
+        assert load_notes()['_tx_key'].tolist() == [
+            '2024-01-15::Shop::12.50::0', '2024-01-15::A::B::100.00::0', '2024-01-16::Shop::100.00::0', '2024-01-15::Shop::n/a::0']
 
 
 class TestMergeNotes:
