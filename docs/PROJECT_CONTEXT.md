@@ -5,14 +5,14 @@ _Evaluated 2026-11-16 at commit 7d68804 (HEAD of main). Source of truth for futu
 ## Status after the 2026-11-16 repair (uncommitted working tree)
 Owner decisions: tabs/ router is canonical; refunds reduce spending; reimbursements (work/friends/family Zelle/Venmo/Cash App) reduce spending and are removed from income; brokerage transfers (Schwab/Wealthfront) are spending in a separate **Investments** category with a sidebar "Include Investments" toggle. Manager call: outgoing P2P = expense.
 
-**Fixed:** findings 1–9, 11, 12 (Transactions search/notes/tags/category edit/CSV, report downloads, HTML share restored), 13 (pipeline imports config), 14, 17; finding 10 handled (assigned reimbursements removed from income via `reimbursements.remove_assigned_from_income`); `freq='M'` and the deprecated `use_container_width` replaced. Pipeline and app run; 70 tests pass; pyflakes clean; all 9 tabs render for 2024–2026 (AppTest + browser).
+**Fixed:** findings 1–9, 11, 12 (Transactions search/notes/tags/category edit/CSV, report downloads, HTML share restored), 15 (load_notes raises on non-empty parse errors so a save can't wipe notes; income/checking loaders show st.error), 13 (pipeline imports config), 14, 17; finding 10 handled (assigned reimbursements removed from income via `reimbursements.remove_assigned_from_income`); `freq='M'` and the deprecated `use_container_width` replaced. Pipeline and app run; 70 tests pass; pyflakes clean; all 9 tabs render for 2024–2026 (AppTest + browser).
 **Also found and fixed during the repair:**
 - The Citi export (`Data/Year to date.CSV`, header-first format, negative Credit values) was silently skipped, so 56 purchases were missing. Citi payments ("ONLINE PAYMENT, THANK YOU") are now detected.
 - 31 checking-account payments to the Citi card ($16,970) were counted as spending (double count). They are now transfers.
 - `zelle_assignments.csv` was being parsed as a bank file.
 
 Effect on real data: card rows 1305→1395 (+7 restored duplicates, +27 refunds, +56 Citi); checking spending 179→148 rows.
-**Still open:** 15 (silent excepts), 16 (note keys use float repr), 18 (ISO week); stale per-year files aren't deleted for years that vanish; HTML entity in merchant names ("&Amp;"); no tag-totals UI when no notes exist yet. The Citi export covers only Jan–Jun 2026, so 2024–2025 Citi purchases are absent (owner should export full history). Two existing reimbursement assignments are outgoing "Zelle Payment To …" rows created by the old bug. They now net to zero; the owner can remove them in Assignment History.
+**Still open:** 16 (note keys use float repr), 18 (ISO week); stale per-year files aren't deleted for years that vanish; HTML entity in merchant names ("&Amp;"); no tag-totals UI when no notes exist yet. The Citi export covers only Jan–Jun 2026, so 2024–2025 Citi purchases are absent (owner should export full history). Two existing reimbursement assignments are outgoing "Zelle Payment To …" rows created by the old bug. They now net to zero; the owner can remove them in Assignment History.
 New modules: `reimbursements.py` (pure matching/offset logic, one-for-one occurrence-index matching), `tabs/reimbursements.py` (assign + history with remove), `tests/test_reimbursements.py`.
 The findings list below is the original 2026-11-16 evaluation, kept for history.
 
@@ -101,6 +101,7 @@ Category mapping precedence (`map_category`): exact (desc, bank_cat) mapping, th
 
 ### UI/UX
 Sidebar collapsed by default but holds all filters. Forced black metric text, so dark mode is unreadable. "Last Updated" shows today's date, not the data date. 9 emoji tabs overflow on narrow screens. Manage tab gives no save confirmation. Forecast for past years uses min-to-max date span, inconsistent with "year in review". `freq='M'` deprecated in tabs/forecasting.py.
+- Minor follow-ups from the 2026-11-16 review: see `docs/IMPROVEMENTS.md`.
 
 ### Tests
 57 tests (recurring, transaction_notes, pure Yearly_Spending helpers). Untested: all loaders, `process_*`, `export_yearly_and_combined`, `main`, `load_category_mappings`, chart_helpers, and the entire frontend/tabs layer. No test would have caught findings 1–4 (a pyflakes/ruff run would).

@@ -111,6 +111,8 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] header {
 
 def inject_css():
     st.markdown(f"<style>{_TOKENS}{_CSS}</style>", unsafe_allow_html=True)
+    for text in st.session_state.pop("_toasts", []):
+        st.toast(text, icon=":material/receipt_long:")
 
 
 def _money(x):
@@ -182,7 +184,8 @@ def receipt(text, detail=""):
     log = st.session_state.setdefault("receipts", [])
     log.insert(0, {"text": text, "detail": detail, "at": datetime.datetime.now().strftime("%b %d %H:%M")})
     del log[20:]
-    st.toast(text, icon=":material/receipt_long:")
+    # Queued, not toasted now: every save calls st.rerun() next, which drops a direct st.toast.
+    st.session_state.setdefault("_toasts", []).append(text)
 
 
 def receipts_panel(n=5):

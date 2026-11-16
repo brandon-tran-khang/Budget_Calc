@@ -332,7 +332,10 @@ def load_income_data():
         if 'Year' not in df.columns:
             df['Year'] = df['Transaction Date'].dt.year
         return df
-    except Exception:
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Could not read {income_path.name}: {e}")
         return pd.DataFrame()
 
 @st.cache_data
@@ -346,7 +349,10 @@ def load_checking_spending():
         if 'Year' not in df.columns:
             df['Year'] = df['Transaction Date'].dt.year
         return df
-    except Exception:
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Could not read {checking_path.name}: {e}")
         return pd.DataFrame()
 
 @st.cache_data

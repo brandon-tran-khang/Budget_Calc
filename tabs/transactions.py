@@ -5,7 +5,7 @@ import pandas as pd
 from config import BUDGET_CATEGORIES
 from ui import receipt
 from transaction_notes import (
-    load_notes, save_notes, compute_tag_totals, get_available_tags,
+    load_notes, save_notes, compute_tag_totals, get_available_tags, count_changed_notes,
 )
 
 
@@ -126,16 +126,19 @@ def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selec
                     if len(new_mapping_rows) == 1 else f"Recategorized {len(new_mapping_rows)} transactions")
 
         # 2. Notes/Tags
-        full_notes = load_notes()
-        editor_keys = set(edited_df['_tx_key'].tolist())
-        other_notes = full_notes[~full_notes['_tx_key'].isin(editor_keys)]
-        editor_notes = edited_df[['_tx_key', 'Note', 'Tags']].copy()
-        combined_notes = pd.concat([other_notes, editor_notes], ignore_index=True)
-        save_notes(combined_notes)
-        changes_made = True
-        receipt(f"Saved notes for {len(editor_notes)} transactions")
+        n_notes = count_changed_notes(editor_df, edited_df)
+        if n_notes:
+            full_notes = load_notes()
+            editor_keys = set(edited_df['_tx_key'].tolist())
+            other_notes = full_notes[~full_notes['_tx_key'].isin(editor_keys)]
+            editor_notes = edited_df[['_tx_key', 'Note', 'Tags']].copy()
+            save_notes(pd.concat([other_notes, editor_notes], ignore_index=True))
+            changes_made = True
+            receipt(f"Saved notes for {n_notes} transaction{'s' if n_notes != 1 else ''}")
 
-        if changes_made:
+        if not changes_made:
+            st.toast("No changes to save")  # no rerun follows, so a direct toast survives
+        else:
             st.cache_data.clear()
             st.rerun()
 

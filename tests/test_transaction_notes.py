@@ -1,9 +1,10 @@
 """Tests for transaction_notes.py — key generation, save/load, merge, tag totals."""
 
 import pandas as pd
+import pytest
 from transaction_notes import (
     generate_tx_key, add_tx_keys, load_notes, save_notes,
-    merge_notes, filter_by_tags, compute_tag_totals,
+    merge_notes, filter_by_tags, compute_tag_totals, count_changed_notes,
 )
 import config
 
@@ -151,3 +152,28 @@ class TestFilterByTags:
         df = pd.DataFrame({'Tags': ['A'], 'Net_Amount': [1]})
         result = filter_by_tags(df, [])
         assert len(result) == 1
+
+
+def test_count_changed_notes_counts_edited_rows():
+    before = pd.DataFrame({"Note": ["a", "b"], "Tags": ["", "x"]})
+    after = pd.DataFrame({"Note": ["a", "B"], "Tags": ["", "x"]})
+    assert count_changed_notes(before, after) == 1
+
+
+def test_count_changed_notes_blank_values_are_equal():
+    before = pd.DataFrame({"Note": [None, float("nan")], "Tags": ["", None]})
+    after = pd.DataFrame({"Note": ["", ""], "Tags": [None, ""]})
+    assert count_changed_notes(before, after) == 0
+
+
+def test_load_notes_empty_file_is_no_notes_but_parse_error_raises(tmp_path, monkeypatch):
+    notes_file = tmp_path / "notes.csv"
+    notes_file.write_bytes(b"")
+    monkeypatch.setattr(config, "NOTES_FILE", notes_file)
+    assert list(load_notes().columns) == ["_tx_key", "Note", "Tags"]
+
+    def boom(*a, **k):
+        raise ValueError("bad csv")
+    monkeypatch.setattr(pd, "read_csv", boom)
+    with pytest.raises(ValueError):
+        load_notes()

@@ -46,7 +46,7 @@ def load_notes():
         mask = df["_tx_key"].str.count("::") == 2
         df.loc[mask, "_tx_key"] = df.loc[mask, "_tx_key"] + "::0"
         return df[["_tx_key", "Note", "Tags"]]
-    except (pd.errors.EmptyDataError, Exception):
+    except pd.errors.EmptyDataError:
         return pd.DataFrame(columns=["_tx_key", "Note", "Tags"])
 
 
@@ -126,6 +126,14 @@ def filter_by_tags(df, selected_tags):
         return bool(row_tags & selected)
 
     return df[df["Tags"].apply(has_tag)].copy()
+
+
+def count_changed_notes(before, after):
+    """Count rows whose Note or Tags differ; None, NaN and '' count as equal."""
+    cols = ["Note", "Tags"]
+    b = before[cols].fillna("").astype(str)
+    a = after[cols].fillna("").astype(str)
+    return int((b != a).any(axis=1).sum())
 
 
 def compute_tag_totals(df):
