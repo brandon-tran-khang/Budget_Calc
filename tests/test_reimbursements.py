@@ -57,3 +57,10 @@ def test_save_load_roundtrip(tmp_path, monkeypatch):
     assert back["Net_Amount"].iloc[0] == 12.5 and back["Budget_Category"].iloc[0] == "Gas"
     r.save_assignments(back.iloc[0:0])
     assert r.load_assignments().empty
+
+
+def test_offsets_week_never_wraps_across_years():
+    # ISO would say week 1 for 2024-12-30/31 and week 53 for 2021-01-01
+    dates = ["2024-12-30", "2024-12-31", "2021-01-01", "2025-02-03"]
+    a = _assigned([(d, "zelle from bob", 20.0, "Groceries") for d in dates])
+    assert r.assignments_as_offsets(a)["Week"].tolist() == [53, 53, 0, 5]

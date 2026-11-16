@@ -280,7 +280,7 @@ def process_credit_cards(raw_df, category_map):
     df['Net_Amount'] = df['Amount_Norm']
     df['account_type'] = 'credit'
 
-    df['Week'] = df['Transaction Date'].dt.isocalendar().week
+    df['Week'] = df['Transaction Date'].dt.strftime('%W').astype(int)
     df['Month'] = df['Transaction Date'].dt.strftime('%B')
     df['Quarter'] = df['Transaction Date'].dt.quarter
 
@@ -318,7 +318,7 @@ def process_checking(checking_df, category_map):
     ck['Raw_Amount'] = pd.to_numeric(ck['Amount'], errors='coerce').fillna(0)
     ck['Net_Amount'] = ck['Amount_Norm']
 
-    ck['Week'] = ck['Transaction Date'].dt.isocalendar().week
+    ck['Week'] = ck['Transaction Date'].dt.strftime('%W').astype(int)
     ck['Month'] = ck['Transaction Date'].dt.strftime('%B')
     ck['Quarter'] = ck['Transaction Date'].dt.quarter
 

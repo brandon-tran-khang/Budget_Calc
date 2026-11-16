@@ -83,6 +83,6 @@ def assignments_as_offsets(assigned_df):
         "account_type": "credit",
         "Month": d.dt.strftime("%B"),
         "Quarter": d.dt.quarter,
-        "Week": d.dt.isocalendar().week,
+        "Week": d.dt.strftime("%W").astype(int),
         "Year": d.dt.year,
     })
