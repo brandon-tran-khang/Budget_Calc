@@ -10,6 +10,8 @@ def render(df_trans, mappings_dict, save_category_mappings):
     st.caption("Review and assign budget categories to merchants. "
                "Merchants not in the mappings file are flagged as unreviewed.")
 
+    df_trans = df_trans[df_trans['Source'] != 'Checking Assignment']  # reimbursement offsets aren't merchants
+
     # Identify unreviewed merchants across ALL data
     all_combos = df_trans[['Clean_Description', 'Category']].drop_duplicates()
     reviewed_keys = set(mappings_dict.keys())
@@ -69,7 +71,7 @@ def render(df_trans, mappings_dict, save_category_mappings):
                 ),
             },
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             num_rows="fixed",
             key="mapping_editor"
         )
@@ -89,7 +91,7 @@ def render(df_trans, mappings_dict, save_category_mappings):
         existing_mappings = pd.read_csv(MAPPINGS_FILE)
         st.dataframe(
             existing_mappings.sort_values('Clean_Description'),
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             height=400
         )

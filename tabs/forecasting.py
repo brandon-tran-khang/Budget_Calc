@@ -45,7 +45,7 @@ def render(df_year, df_income_year, df_checking_year, selected_year,
 
     year_start = f'{selected_year}-01-01'
     year_end = f'{selected_year}-12-31'
-    dates = pd.date_range(start=year_start, end=year_end, freq='M')
+    dates = pd.date_range(start=year_start, end=year_end, freq='ME')
 
     fig_proj = go.Figure()
 
@@ -56,7 +56,7 @@ def render(df_year, df_income_year, df_checking_year, selected_year,
             name='Projection', line=dict(dash='dot', color='gray')))
 
     actual_cum = df_year.sort_values('Transaction Date').set_index('Transaction Date')['Net_Amount'].cumsum()
-    actual_cum_resampled = actual_cum.resample('M').last()
+    actual_cum_resampled = actual_cum.resample('ME').last()
 
     fig_proj.add_trace(go.Scatter(
         x=actual_cum_resampled.index, y=actual_cum_resampled.values,
@@ -65,7 +65,7 @@ def render(df_year, df_income_year, df_checking_year, selected_year,
 
     title = "Actual Cumulative Spend vs. Projected Path" if is_current_year else f"Cumulative Spend for {selected_year}"
     apply_default_layout(fig_proj, title=title, hovermode="x unified")
-    st.plotly_chart(fig_proj, use_container_width=True)
+    st.plotly_chart(fig_proj, width='stretch')
 
     # --- Annual Report Download ---
     st.markdown("---")

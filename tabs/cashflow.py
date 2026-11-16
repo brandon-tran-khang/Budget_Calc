@@ -87,7 +87,7 @@ def render(df_year, df_income_year, df_checking_year):
     ))
     apply_default_layout(fig_cf, height=400, barmode='group',
                          yaxis_title="Amount ($)", legend_title_text="")
-    st.plotly_chart(fig_cf, use_container_width=True)
+    st.plotly_chart(fig_cf, width='stretch')
 
     # --- Two-column layout: Income Source + Checking Category ---
     col_left, col_right = st.columns(2)
@@ -100,7 +100,7 @@ def render(df_year, df_income_year, df_checking_year):
                 source_group, 'Net_Amount', 'Income_Source',
                 color_discrete_sequence=px.colors.qualitative.Safe
             )
-            st.plotly_chart(fig_income_pie, use_container_width=True)
+            st.plotly_chart(fig_income_pie, width='stretch')
         else:
             st.info("Income source classification not available.")
 
@@ -109,7 +109,7 @@ def render(df_year, df_income_year, df_checking_year):
         if not df_checking_year.empty and 'Budget_Category' in df_checking_year.columns:
             ck_cat_group = df_checking_year.groupby('Budget_Category')['Net_Amount'].sum().reset_index()
             fig_ck_pie = make_pie_chart(ck_cat_group, 'Net_Amount', 'Budget_Category')
-            st.plotly_chart(fig_ck_pie, use_container_width=True)
+            st.plotly_chart(fig_ck_pie, width='stretch')
         else:
             st.info("No checking expenses to display.")
 
@@ -141,7 +141,7 @@ def render(df_year, df_income_year, df_checking_year):
         color_discrete_map={'Credit Card': '#8B5CF6', 'Checking/Debit': '#F59E0B'}
     )
     apply_default_layout(fig_sources, legend_title_text="")
-    st.plotly_chart(fig_sources, use_container_width=True)
+    st.plotly_chart(fig_sources, width='stretch')
 
     # --- Income Transactions Table ---
     st.markdown("---")
@@ -159,7 +159,7 @@ def render(df_year, df_income_year, df_checking_year):
             "Income_Source": st.column_config.TextColumn("Source"),
             "Net_Amount": st.column_config.NumberColumn("Amount", format="$%.2f"),
         },
-        use_container_width=True,
+        width='stretch',
         height=400,
         hide_index=True
     )

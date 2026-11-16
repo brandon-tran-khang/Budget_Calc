@@ -66,7 +66,7 @@ def render(df_year, recurring_merchants, subscription_alerts):
                 "Active_Range": st.column_config.TextColumn("Active Months"),
                 "Annual_Projected": st.column_config.NumberColumn("Annual Cost", format="$%.2f"),
             },
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             height=400
         )
@@ -78,7 +78,7 @@ def render(df_year, recurring_merchants, subscription_alerts):
             cat_recurring, 'Monthly_Amount', 'Budget_Category',
             color_discrete_sequence=px.colors.qualitative.Pastel
         )
-        st.plotly_chart(fig_rec_pie, use_container_width=True)
+        st.plotly_chart(fig_rec_pie, width='stretch')
 
     # Monthly Recurring Spend Trend
     st.markdown("#### Monthly Recurring Spend")
@@ -94,4 +94,4 @@ def render(df_year, recurring_merchants, subscription_alerts):
             color_discrete_sequence=['#6366f1']
         )
         apply_default_layout(fig_rec_trend, height=300)
-        st.plotly_chart(fig_rec_trend, use_container_width=True)
+        st.plotly_chart(fig_rec_trend, width='stretch')

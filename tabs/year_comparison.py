@@ -44,7 +44,7 @@ def render(df_trans):
         color_discrete_sequence=px.colors.qualitative.Set2
     )
     apply_default_layout(fig_monthly, hovermode="x unified")
-    st.plotly_chart(fig_monthly, use_container_width=True)
+    st.plotly_chart(fig_monthly, width='stretch')
 
     # Chart 2: Category Comparison
     st.markdown("#### Spending by Category per Year")
@@ -56,7 +56,7 @@ def render(df_trans):
         color_discrete_sequence=px.colors.qualitative.Set2
     )
     apply_default_layout(fig_cat, xaxis_tickangle=-45)
-    st.plotly_chart(fig_cat, use_container_width=True)
+    st.plotly_chart(fig_cat, width='stretch')
 
     # Chart 3: Cumulative Spending Curves
     st.markdown("#### Cumulative Spending Through the Year")
@@ -71,7 +71,7 @@ def render(df_trans):
         ))
     apply_default_layout(fig_cum, xaxis_title="Day of Year", yaxis_title="Cumulative Spend ($)",
                          hovermode="x unified")
-    st.plotly_chart(fig_cum, use_container_width=True)
+    st.plotly_chart(fig_cum, width='stretch')
 
     # Table: YoY Change by Category
     st.markdown("#### Year-over-Year Change by Category")
@@ -97,11 +97,11 @@ def render(df_trans):
                 'Change ($)': '${:+,.2f}',
                 'Change (%)': '{:+.1f}%'
             }),
-            use_container_width=True
+            width='stretch'
         )
     else:
         pivot = df_compare.groupby(['Budget_Category', 'Year'])['Net_Amount'].sum().unstack(fill_value=0)
         st.dataframe(
             pivot.style.format('${:,.2f}'),
-            use_container_width=True
+            width='stretch'
         )

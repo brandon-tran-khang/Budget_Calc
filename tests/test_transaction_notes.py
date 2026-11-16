@@ -1,10 +1,9 @@
 """Tests for transaction_notes.py — key generation, save/load, merge, tag totals."""
 
 import pandas as pd
-import pytest
 from transaction_notes import (
     generate_tx_key, add_tx_keys, load_notes, save_notes,
-    merge_notes, get_all_tags, filter_by_tags, compute_tag_totals,
+    merge_notes, filter_by_tags, compute_tag_totals,
 )
 import config
 

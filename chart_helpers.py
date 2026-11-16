@@ -16,6 +16,7 @@ def apply_default_layout(fig, height=350, **kwargs):
 
 def make_pie_chart(data, values, names, height=350, **kwargs):
     """Create a consistently styled donut chart."""
+    data = data.assign(**{values: data[values].clip(lower=0)})  # pies can't show negatives
     color_seq = kwargs.pop('color_discrete_sequence', px.colors.qualitative.Prism)
     fig = px.pie(
         data, values=values, names=names, hole=0.6,

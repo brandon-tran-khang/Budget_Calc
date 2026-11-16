@@ -41,7 +41,7 @@ def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selec
                     "Note": st.column_config.TextColumn("Note"),
                     "Tags": st.column_config.TextColumn("Tags"),
                 },
-                use_container_width=True,
+                width='stretch',
                 height=400,
                 hide_index=True
             )
@@ -84,12 +84,13 @@ def render(df_filtered, df_trans, notes_df, selected_year, selected_month, selec
                 options=sorted(BUDGET_CATEGORIES),
                 required=True
             ),
-            "Net_Amount": st.column_config.NumberColumn("Amount", format="$%.2f", disabled=True),
+            "Net_Amount": st.column_config.NumberColumn("Amount", format="$%.2f", disabled=True,
+                                                         help="Negative indicates a refund or reimbursement"),
             "Note": st.column_config.TextColumn("Note", max_chars=200),
             "Tags": st.column_config.TextColumn("Tags", max_chars=100),
         },
         column_order=["Transaction Date", "Clean_Description", "Budget_Category", "Net_Amount", "Note", "Tags"],
-        use_container_width=True,
+        width='stretch',
         height=600,
         hide_index=True,
         num_rows="fixed",

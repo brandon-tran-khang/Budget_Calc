@@ -14,22 +14,20 @@ def render(df_filtered, df_year, df_trans, df_income_year, selected_year, select
     with col_chart1:
         st.subheader("Spending Trend Over Time")
         time_group = df_filtered.groupby('Transaction Date')['Net_Amount'].sum().reset_index()
-        time_group['Net_Amount'] = abs(time_group['Net_Amount'])
 
         fig_trend = px.line(time_group, x='Transaction Date', y='Net_Amount',
                             markers=True, line_shape='spline')
         fig_trend.update_traces(line_color='#3B82F6', line_width=3)
         apply_default_layout(fig_trend, xaxis_title="", yaxis_title="Amount ($)")
-        st.plotly_chart(fig_trend, use_container_width=True)
+        st.plotly_chart(fig_trend, width='stretch')
 
     with col_chart2:
         st.subheader("Category Split")
         cat_group = df_filtered.groupby('Budget_Category')['Net_Amount'].sum().reset_index()
-        cat_group['Net_Amount'] = cat_group['Net_Amount'].clip(lower=0)
 
         fig_pie = make_pie_chart(cat_group, 'Net_Amount', 'Budget_Category', showlegend=False,
                                  margin=dict(t=0, b=0, l=0, r=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width='stretch')
 
     # Fixed vs. Variable Spending Breakdown
     if 'spending_type' in df_filtered.columns:
@@ -50,14 +48,14 @@ def render(df_filtered, df_year, df_trans, df_income_year, selected_year, select
         with col_fv3:
             fv_data = pd.DataFrame({
                 'Type': ['Fixed', 'Variable'],
-                'Amount': [fixed_total, variable_total]
+                'Amount': [max(0, fixed_total), max(0, variable_total)]  # pie can't show negatives
             })
             fig_fv = px.pie(fv_data, values='Amount', names='Type', hole=0.65,
                             color='Type',
                             color_discrete_map={'Fixed': '#EF4444', 'Variable': '#3B82F6'})
             fig_fv.update_layout(height=200, showlegend=True,
                                  margin=dict(t=0, b=0, l=10, r=10))
-            st.plotly_chart(fig_fv, use_container_width=True)
+            st.plotly_chart(fig_fv, width='stretch')
 
         # Stacked bar: Fixed vs Variable per month
         df_fv = df_filtered.copy()
@@ -74,7 +72,7 @@ def render(df_filtered, df_year, df_trans, df_income_year, selected_year, select
         )
         apply_default_layout(fig_stacked, title="Monthly Spending: Fixed vs. Variable",
                              legend_title_text="")
-        st.plotly_chart(fig_stacked, use_container_width=True)
+        st.plotly_chart(fig_stacked, width='stretch')
 
     # --- Monthly Report Download ---
     st.markdown("---")

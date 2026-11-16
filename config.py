@@ -16,8 +16,12 @@ BUDGET_CATEGORIES = [
     "Discord Subscription", "Spotify Subscription", "Amazon Prime Subscription",
     "Gym Membership", "Chase Sapphire Preferred Fee", "Costco Membership",
     "Groceries", "Gas", "Restaurants", "Health / Doctors", "Car Maintenance",
-    "Pest control", "Landscaping", "Games", "Vacation", "Personal"
+    "Pest control", "Landscaping", "Games", "Vacation", "Personal", "Investments"
 ]
+
+# Brokerage/robo-advisor deposits from checking -> 'Investments' (still counted as spending;
+# the sidebar "Include Investments" toggle hides them).
+INVESTMENT_KEYWORDS = ['SCHWAB BROKERAGE', 'WEALTHFRONT']
 
 # --- Month Names ---
 MONTH_NAMES = {
@@ -38,17 +42,26 @@ BANK_CATEGORY_FALLBACK = {
 
 # --- Checking Account Classification ---
 INCOME_KEYWORDS = ['DIRECT DEP', 'PAYROLL', 'ACH CREDIT', 'DEPOSIT']
+# Zelle/Venmo/Cash App are NOT transfers: incoming lands in income so the Reimbursements tab
+# can offset it against spending; outgoing is an expense (paying someone).
 TRANSFER_KEYWORDS = [
-    'TRANSFER', 'PAYMENT TO CHASE CARD', 'ONLINE TRANSFER',
-    'SAVE AS YOU GO', 'ZELLE'
+    'TRANSFER', 'PAYMENT TO CHASE CARD', 'CITI CARD ONLINE PAYMENT', 'ONLINE TRANSFER',
+    'SAVE AS YOU GO'
 ]
+P2P_KEYWORDS = ['ZELLE', 'VENMO', 'CASH APP']
+# Checked in order; P2P first so "ZELLE ... DEPOSIT" isn't labelled a plain Deposit.
 INCOME_SOURCE_MAP = {
+    'ZELLE': 'P2P Transfer', 'VENMO': 'P2P Transfer', 'CASH APP': 'P2P Transfer',
     'DIRECT DEP': 'Payroll', 'PAYROLL': 'Payroll',
     'ACH CREDIT': 'ACH Credit', 'DEPOSIT': 'Deposit',
 }
 
 # --- Payment Detection ---
-PAYMENT_TERMS = ['PAYMENT THANK YOU', 'MOBILE PAYMENT', 'CREDIT CARD PYMT', 'AUTOPAY']
+# 'PAYMENT, THANK YOU' is Citi's wording ("ONLINE PAYMENT, THANK YOU").
+PAYMENT_TERMS = ['PAYMENT THANK YOU', 'PAYMENT, THANK YOU', 'MOBILE PAYMENT', 'CREDIT CARD PYMT', 'AUTOPAY']
+
+# User-state files that live in DATA_DIR but are not bank exports.
+REIMBURSEMENTS_FILE = DATA_DIR / "zelle_assignments.csv"
 
 # --- Transaction Notes ---
 DEFAULT_TAGS = [

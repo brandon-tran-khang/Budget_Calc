@@ -17,9 +17,9 @@ def render(df_filtered):
             marker_color='#6366f1'
         ))
         apply_default_layout(fig_bar, height=500, title="Top 10 Merchants by Spend")
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width='stretch')
     with col_v2:
         st.info("This view helps you identify 'Subscription Creep' or frequent small purchases that add up.")
-        st.write("**Top 5 Most Frequent Places**")
-        freq_merchants = df_filtered['Clean_Description'].value_counts().head(5)
+        st.write("**Top 5 Most Frequent Places** (purchases only, refunds excluded)")
+        freq_merchants = df_filtered[df_filtered['Net_Amount'] > 0]['Clean_Description'].value_counts().head(5)
         st.table(freq_merchants)
