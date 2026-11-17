@@ -14,6 +14,13 @@ Owner decisions: tabs/ router is canonical; refunds reduce spending; reimburseme
 Effect on real data: card rows 1305→1395 (+7 restored duplicates, +27 refunds, +56 Citi); checking spending 179→148 rows.
 **Still open:** stale per-year files aren't deleted for years that vanish; HTML entity in merchant names ("&Amp;"); no tag-totals UI when no notes exist yet. The Citi export covers only Jan–Jun 2026, so 2024–2025 Citi purchases are absent (owner should export full history). Two existing reimbursement assignments are outgoing "Zelle Payment To …" rows created by the old bug. They now net to zero; the owner can remove them in Assignment History.
 New modules: `reimbursements.py` (pure matching/offset logic, one-for-one occurrence-index matching), `tabs/reimbursements.py` (assign + history with remove), `tests/test_reimbursements.py`.
+**Data refresh (2026-11-16, spec `docs/specs/2026-11-16-data-refresh.md`):**
+- Citi exports now format amounts as `$ 12.34` / ` -$ 123.45`; these used to coerce to 0 and silently drop every row. Amounts are parsed tolerantly, and a file with unreadable amounts is refused with an ERROR instead of zero-filled.
+- Overlapping exports: the newest export wins for the dates it covers; older files contribute only rows outside every newer file's date span. Identical rows within a file are never deduplicated.
+- Card 3189 is the reissued card 5967 (rows match in the overlap); the pipeline auto-merges accounts on that evidence and prints `merged account ...`.
+- Citi gap 2026-06-29..2026-10-23 is pending an owner export; the app shows it as a coverage warning.
+- **First refresh done 2026-11-16** (3 Chase + 1 Citi export, data through 2026-11-16; spec `docs/specs/2026-11-16-data-refresh.md`): card spending 2024 380 rows / $15,898.59 and 2025 637 / $29,493.79 (unchanged), 2026 703 / $31,336.54; 2026 income 97 / $96,093.09, checking spending 98 / $58,569.28, card payments 30 / -$34,603.89. 14 reimbursement assignments intact. About 100 new merchants default to 'Personal' for review on the Categories page.
+- Launch import safety: the import runs under a lock (a refresh mid-import cannot import twice); a bank file the pipeline refused or could not read (e.g. unreadable amounts) is flagged on every launch via `Yearly_Spending.unused_inputs`, not just on the import run.
 The findings list below is the original 2026-11-16 evaluation, kept for history.
 
 ## UI overhaul ("Cash Envelopes"), 2026-11-16
@@ -36,9 +43,9 @@ it all in a Streamlit dashboard. Goal: understand spending habits, year-over-yea
 (Zelle/Venmo money received from others to offset shared costs).
 
 ## How it runs
-1. Drop raw bank CSVs into `Data/` (credit cards) and `Data/Checking/` (checking). `Data/` is gitignored (private).
-2. `python Yearly_Spending.py`: pipeline that writes processed CSVs back into `Data/`.
-3. `streamlit run frontend.py`: dashboard that reads only the processed CSVs plus user-edited CSVs.
+1. Download one CSV per account (Chase "all transactions", max range; Citi any range) and drop them into `Data/Inbox/` or any folder. `Data/` is gitignored (private).
+2. Opening the dashboard (`streamlit run frontend.py`) auto-imports anything in `Data/Inbox/`: `frontend.py` calls `ingest.pending_files`, and if any file is recognized runs `Yearly_Spending.main()` once (no `st.rerun`), clears `st.cache_data`, toasts a summary and shows ERROR/WARNING lines. Unrecognized files are only named in a warning. CLI `python Yearly_Spending.py [path]` still works for other folders. Intake (`ingest.py`) classifies each file by header and moves it into `Data/` (cards) or `Data/Checking/`; the pipeline then writes processed CSVs back into `Data/`. Old exports are never removed, so Chase and Citi history is retained and extended by each drop (newest export wins inside its own date span; covered by `tests/test_yearly_spending.py`). Cards 5967 and 3189 are the same card (auto-merged). Never delete old exports: Chase only exports ~24 months. The ~100 new merchants stay `Personal` by owner decision (no mapping change).
+3. Dashboard reads only the processed CSVs plus user-edited CSVs.
 4. `pytest`: tests in `tests/` (pytest is not installed in system python; `uv run --with pandas --with pytest --with streamlit --with plotly python -m pytest`).
 
 Python 3.14, pandas 2.3.3, streamlit 1.53.1, plotly 6.5.2.
@@ -61,6 +68,7 @@ Pipeline outputs in `Data/`:
 - `{YYYY}_Credit_Card_Payments.csv`, `all_credit_card_payments.csv`.
 - `{YYYY}_All_Income.csv`, `all_income.csv`: checking income with Income_Source.
 - `{YYYY}_All_Checking_Spending.csv`, `all_checking_spending.csv`.
+- `all_sources.csv`: coverage report, one row per input file (Account, Source, File, First, Last, Rows_In_File, Rows_Used). Read by the frontend for the "Data through" caption and coverage warnings.
 User-edited state:
 - `category_mappings.csv` (project root, untracked): (Clean_Description, Bank_Category) → Budget_Category. Seeded from `_SEED_CATEGORY_MAP` on first run; edited by the Manage tab.
 - `transaction_notes.csv` (root, gitignored): _tx_key, Note, Tags.

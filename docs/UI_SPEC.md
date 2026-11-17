@@ -80,7 +80,8 @@ Charts:
   - Use `initial_sidebar_state="expanded"`.
   - The page header comes from the page title plus `ui.hero(...)` on Overview only. Other pages show a compact context line ("2026 · March · All categories · investments included") so filters are always visible.
   - The four old top metrics fold into the hero breakdown and the Overview content. Card Payments Made stays visible as a secondary `st.metric` with its help text.
-  - "Last updated" shows the newest transaction date in the data, not today.
+  - Launch import: when `Data/Inbox` holds recognized exports, `frontend.py` runs the pipeline under a spinner ("Importing N new file(s)..."), then shows `st.toast` ("Imported N file(s). Data through ..."); pipeline ERROR/WARNING lines and a named list of unrecognized inbox files render as plain `st.warning` at the top of the page.
+  - The sidebar caption "Data through <Mon D, YYYY>" shows the newest transaction date in any export (from `all_sources.csv`), not today. One `:material/warning:` caption per `ingest.coverage_warnings` line follows it (per-account gaps, stale accounts). The warnings render in full-strength rail text (the muted caption failed AA, 4.06:1, on the light rail) inside `st.container(key="data-warn")`.
 - **Motion:** use CSS only.
   - Envelope bars draw in once with `transform: scaleX(0→1)`, `transform-origin:left`, 420ms `cubic-bezier(.16,1,.3,1)`, staggered by 30ms per row (max 8).
   - Page main content fades in over 180ms with opacity plus translateY(4px).

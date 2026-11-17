@@ -44,6 +44,9 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 section[data-testid="stSidebar"] [data-testid="stNavSectionHeader"],
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] header {
   font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+/* data-coverage warnings: full-strength rail text (muted caption was 4.06:1 on the light rail) */
+section[data-testid="stSidebar"] .st-key-data-warn [data-testid="stCaptionContainer"],
+section[data-testid="stSidebar"] .st-key-data-warn [data-testid="stCaptionContainer"] * { color: inherit !important; opacity: 1 !important; }
 .bc-flabel { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
   opacity: .7; margin: 4px 0 0 2px; }
 [data-testid="stSidebarHeader"]::before { content: "Budget Calc"; font-weight: 800; font-size: 18px;

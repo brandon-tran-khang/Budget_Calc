@@ -1,12 +1,14 @@
 import pandas as pd
 from pathlib import Path
 import re
+import sys
 
 from config import (
     DATA_DIR, CHECKING_DIR, MAPPINGS_FILE, BANK_CATEGORY_FALLBACK,
     INCOME_KEYWORDS, TRANSFER_KEYWORDS, INCOME_SOURCE_MAP, PAYMENT_TERMS, REIMBURSEMENTS_FILE,
     INVESTMENT_KEYWORDS,
 )
+from ingest import intake, drop_superseded, coverage_warnings
 
 # Legacy mapping dictionary — used ONLY to seed category_mappings.csv on first run.
 _SEED_CATEGORY_MAP = {
@@ -94,6 +96,21 @@ def load_category_mappings():
 def _is_output_file(filename):
     return bool(re.match(r'^\d{4}_', filename)) or filename.startswith('all_')
 
+def unused_inputs(sources):
+    """Bank CSVs sitting in Data/ or Data/Checking/ that the last run did not read (refused or wrong place)."""
+    used = set(sources['File'])
+    return sorted(p.name for d in (DATA_DIR, CHECKING_DIR) if d.is_dir() for p in d.iterdir()
+                  if p.is_file() and p.suffix.lower() == '.csv' and not _is_output_file(p.name)
+                  and p.name != REIMBURSEMENTS_FILE.name and p.name not in used)
+
+def _to_amount(s):
+    """Parse bank amounts, tolerating '$', ',' and spaces (Citi: '$ 12.34', ' -$ 1.00')."""
+    return pd.to_numeric(s.astype(str).str.replace(r'[$,\s]', '', regex=True), errors='coerce')
+
+def _unreadable(s):
+    """Count non-blank raw values that fail to parse (these must never be zero-filled)."""
+    return int((s.notna() & s.astype(str).str.strip().ne('') & _to_amount(s).isna()).sum())
+
 def clean_merchant_name(description):
     desc = str(description).upper()
     keyword_map = {
@@ -144,20 +161,29 @@ def load_and_combine_csv_files(directory):
             df = pd.read_csv(file, skiprows=1 if "Time period" in first_line else 0,
                              encoding='utf-8-sig')
             if {'Debit', 'Credit'} <= set(df.columns):
+                bad = _unreadable(df['Debit']) + _unreadable(df['Credit'])
+                if bad:
+                    print(f"ERROR {file.name}: {bad} unreadable amounts, file skipped")
+                    continue
                 df['Source'] = 'Citi'
                 # Credit sign varies between Citi exports, so force it to reduce spending.
-                df['Amount_Norm'] = pd.to_numeric(df['Debit'], errors='coerce').fillna(0) - \
-                                   pd.to_numeric(df['Credit'], errors='coerce').fillna(0).abs()
+                df['Amount_Norm'] = _to_amount(df['Debit']).fillna(0) - \
+                                   _to_amount(df['Credit']).fillna(0).abs()
                 df = df.rename(columns={'Date': 'Transaction Date'})
             elif 'Details' in df.columns or 'Posting Date' in df.columns:
                 continue  # checking file accidentally placed here
             elif {'Transaction Date', 'Description', 'Amount'} <= set(df.columns):
+                bad = _unreadable(df['Amount'])
+                if bad:
+                    print(f"ERROR {file.name}: {bad} unreadable amounts, file skipped")
+                    continue
                 df['Source'] = 'Chase'
-                df['Amount_Norm'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0) * -1
+                df['Amount_Norm'] = _to_amount(df['Amount']).fillna(0) * -1
             else:
                 print(f"Skipping unrecognized file: {file.name}")
                 continue
 
+            df['_file'] = file.name
             all_transactions.append(df)
             print(f"Loaded: {file.name}")
 
@@ -206,11 +232,17 @@ def load_checking_csv_files(directory):
             if df.empty:
                 continue
 
+            bad = _unreadable(df['Amount'])
+            if bad:
+                print(f"ERROR {file.name}: {bad} unreadable amounts, file skipped")
+                continue
+
             df['Source'] = 'Chase Checking'
+            df['_file'] = file.name
             df['account_type'] = 'checking'
             
             # Handle Amount normalization safely
-            df['Amount_Norm'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0) * -1
+            df['Amount_Norm'] = _to_amount(df['Amount']).fillna(0) * -1
             
             all_transactions.append(df)
             print(f"Loaded checking: {file.name}")
@@ -315,7 +347,7 @@ def process_checking(checking_df, category_map):
     """
     ck = checking_df.copy()
     ck['Transaction Date'] = pd.to_datetime(ck['Transaction Date'], format='mixed')
-    ck['Raw_Amount'] = pd.to_numeric(ck['Amount'], errors='coerce').fillna(0)
+    ck['Raw_Amount'] = _to_amount(ck['Amount']).fillna(0)
     ck['Net_Amount'] = ck['Amount_Norm']
 
     ck['Week'] = ck['Transaction Date'].dt.strftime('%W').astype(int)
@@ -389,8 +421,11 @@ def export_yearly_and_combined(data_list, years, output_cols, per_year_suffix, c
     return all_yearly
 
 
-def main():
+def main(inbox=None):
     print("--- Starting Budget Processing ---")
+
+    inbox = Path(inbox) if inbox else DATA_DIR / 'Inbox'
+    intake(inbox, DATA_DIR, CHECKING_DIR)  # prints what it moves/warns about
 
     raw_df = load_and_combine_csv_files(DATA_DIR)
     checking_df = load_checking_csv_files(CHECKING_DIR)
@@ -398,6 +433,14 @@ def main():
     if raw_df.empty and checking_df.empty:
         print("No data found.")
         return
+
+    sources = []
+    if not raw_df.empty:
+        raw_df, card_src = drop_superseded(raw_df)
+        sources.append(card_src)
+    if not checking_df.empty:
+        checking_df, ck_src = drop_superseded(checking_df)
+        sources.append(ck_src)
 
     category_map = load_category_mappings()
     spend_cols = ['Transaction Date', 'Clean_Description', 'Category', 'Budget_Category',
@@ -437,9 +480,18 @@ def main():
             export_yearly_and_combined(ck_expense, years_of(ck_expense), spend_cols,
                                        '_All_Checking_Spending.csv', 'all_checking_spending.csv')
 
+    sources = pd.concat(sources, ignore_index=True)
+    sources.to_csv(DATA_DIR / 'all_sources.csv', index=False)
+    print(f"\nData through {pd.to_datetime(sources['Last']).max():%Y-%m-%d}")
+    for acct, g in sources.groupby('Account'):
+        print(f"  {acct}: {pd.to_datetime(g['First']).min():%Y-%m-%d}..{pd.to_datetime(g['Last']).max():%Y-%m-%d}, "
+              f"{g['Rows_Used'].sum()} rows used, {len(g)} file(s)")
+    for w in coverage_warnings(sources):
+        print(f"WARNING {w}")
+
     print("\n" + "-" * 30)
     print("--- Budget Processing Complete ---")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else None)

@@ -1,4 +1,6 @@
 Data/*
+/*.csv
+/*.CSV
 transaction_notes.csv
 .claude
 CLAUDE.md

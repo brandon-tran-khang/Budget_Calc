@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import contextlib
+import io
+import threading
 from config import MONTH_NAMES, MAPPINGS_FILE, DATA_DIR
 from recurring import detect_recurring_merchants, classify_transactions, detect_subscription_changes
 from transaction_notes import (
@@ -8,6 +11,8 @@ from transaction_notes import (
 )
 from reimbursements import load_assignments, assignments_as_offsets, remove_assigned_from_income
 import ui
+from ingest import coverage_warnings, pending_files
+import Yearly_Spending
 from tabs import (overview, vendor, transactions, forecasting, year_comparison, recurring_tab, cashflow, manage,
                   reimbursements as reimbursements_tab)
 
@@ -19,6 +24,38 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 ui.inject_css()
+
+# --- Auto-import: anything dropped in Data/Inbox is processed before any loader runs ---
+# One pass per script run, no st.rerun(); files that somehow remain are retried on the next interaction.
+_inbox = DATA_DIR / 'Inbox'
+
+
+@st.cache_resource
+def _import_lock():
+    return threading.Lock()  # a refresh mid-import starts a new session; it must wait, not import twice
+
+
+with _import_lock():  # re-check inside the lock: another session may have just finished the import
+    _ready, _unknown = pending_files(_inbox)
+    if _ready:
+        _out = io.StringIO()
+        try:
+            with st.spinner(f"Importing {len(_ready)} new file(s)..."), contextlib.redirect_stdout(_out):
+                Yearly_Spending.main(_inbox)
+            st.cache_data.clear()  # loaders must re-read the regenerated CSVs
+            _lines = _out.getvalue().splitlines()
+            _through = next((l.strip() for l in _lines if l.startswith('Data through')), '')
+            st.toast(f"Imported {len(_ready)} file(s). {_through}".strip(), icon=":material/download_done:")
+            # Only ERRORs: coverage gaps show in the sidebar, unrecognized files just below.
+            st.session_state['_import_notes'] = [l for l in _lines if l.startswith('ERROR')]
+            _unknown = pending_files(_inbox)[1]
+        except Exception as e:
+            st.error(f"Import from {_inbox.name} failed: {e}")
+for _note in st.session_state.get('_import_notes', []):
+    st.warning(_note)
+if _unknown:
+    st.warning(f"{len(_unknown)} file(s) in {_inbox.name} not recognized as bank exports: "
+               + ", ".join(p.name for p in _unknown))
 
 # --- Helpers (kept here because they use @st.cache_data) ---
 
@@ -356,6 +393,22 @@ def load_checking_spending():
         return pd.DataFrame()
 
 @st.cache_data
+def load_sources():
+    sources_path = DATA_DIR / "all_sources.csv"
+    if not sources_path.exists():
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(sources_path)
+        df['First'] = pd.to_datetime(df['First'])
+        df['Last'] = pd.to_datetime(df['Last'])
+        return df
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Could not read {sources_path.name}: {e}")
+        return pd.DataFrame()
+
+@st.cache_data
 def load_reimbursement_assignments():
     return load_assignments()
 
@@ -369,6 +422,11 @@ def load_transaction_notes():
 df_trans, df_payments = load_data()
 df_income = load_income_data()
 df_checking = load_checking_spending()
+df_sources = load_sources()
+# A refused file (e.g. unreadable amounts) is moved out of the inbox, so flag it on every launch, not just the import run.
+if not df_sources.empty and (_unread := Yearly_Spending.unused_inputs(df_sources)):
+    st.warning("Not read, so missing from the numbers: " + ", ".join(_unread)
+               + ". Drop a corrected copy in Data/Inbox/, then delete the unread one from Data/.")
 assigned_df = load_reimbursement_assignments()
 # Assigned reimbursements are spending offsets (see load_data), so they must not also count as income.
 df_income_raw = df_income
@@ -432,7 +490,11 @@ with st.sidebar:
         if not df_checking_year.empty:
             df_checking_year = df_checking_year[df_checking_year['Budget_Category'] != 'Investments']
 
-    st.caption(f"Last updated: {df_trans['Transaction Date'].max().date()}")
+    data_through = df_sources['Last'].max() if not df_sources.empty else df_trans['Transaction Date'].max()
+    st.caption(f"Data through {data_through:%b} {data_through.day}, {data_through.year}")
+    with st.container(key="data-warn"):  # styled in ui.py: full-contrast rail text
+        for w in coverage_warnings(df_sources):
+            st.caption(f":material/warning: {w.replace('..', ' to ').replace('-', '‑')}")  # wrap between dates, not inside them
 
 # Apply Filters
 df_filtered = df_year.copy()
