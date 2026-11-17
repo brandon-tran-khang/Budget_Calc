@@ -5,12 +5,11 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from config import MONTH_NAMES
-from chart_helpers import apply_default_layout, make_pie_chart
+from chart_helpers import apply_default_layout
+from ui import section, envelopes, envelope_rows
 
 
 def render(df_year, df_income_year, df_checking_year):
-    st.subheader("Income & Cash Flow")
-
     if df_income_year.empty:
         st.info("No income data found for this year. To enable this tab:\n"
                 "1. Export your Chase checking account CSV\n"
@@ -28,23 +27,21 @@ def render(df_year, df_income_year, df_checking_year):
 
     col_cf1, col_cf2, col_cf3, col_cf4 = st.columns(4)
     with col_cf1:
-        st.metric("Total Income", f"${total_income:,.2f}")
+        st.metric("Total Income", f"${total_income:,.2f}", border=False)
     with col_cf2:
         st.metric("Total Expenses", f"${total_all_expenses:,.2f}",
-                   help="Credit card + checking/debit spending combined")
+                   help="Credit card + checking/debit spending combined", border=False)
     with col_cf3:
         delta_color = "normal" if net_savings >= 0 else "inverse"
         st.metric("Net Savings", f"${net_savings:,.2f}",
                    delta=f"{savings_rate:.1f}% savings rate",
-                   delta_color=delta_color)
+                   delta_color=delta_color, border=False)
     with col_cf4:
         st.metric("Checking Expenses", f"${total_checking_expenses:,.2f}",
-                   help="Debit card / ACH expenses from checking account")
-
-    st.markdown("---")
+                   help="Debit card / ACH expenses from checking account", border=False)
 
     # --- Monthly Income vs Expenses Chart ---
-    st.subheader("Monthly Income vs Expenses")
+    section("Monthly Income vs Expenses")
 
     df_income_year = df_income_year.copy()
     df_income_year['month_num'] = df_income_year['Transaction Date'].dt.month
@@ -74,48 +71,46 @@ def render(df_year, df_income_year, df_checking_year):
     fig_cf = go.Figure()
     fig_cf.add_trace(go.Bar(
         x=monthly_cf['Month'], y=monthly_cf['Income'],
-        name='Income', marker_color='#22C55E'
+        name='Income', marker_color='#2E7D5B'
     ))
     fig_cf.add_trace(go.Bar(
         x=monthly_cf['Month'], y=monthly_cf['Total_Expenses'],
-        name='Expenses', marker_color='#EF4444'
+        name='Expenses', marker_color='#B3261E'
     ))
     fig_cf.add_trace(go.Scatter(
         x=monthly_cf['Month'], y=monthly_cf['Net_Savings'],
         name='Net Savings', mode='lines+markers',
-        line=dict(color='#3B82F6', width=3, dash='dot')
+        line=dict(color='#1F6B4F', width=3, dash='dot')
     ))
     apply_default_layout(fig_cf, height=400, barmode='group',
                          yaxis_title="Amount ($)", legend_title_text="")
-    st.plotly_chart(fig_cf, use_container_width=True)
+    st.plotly_chart(fig_cf, width='stretch')
 
     # --- Two-column layout: Income Source + Checking Category ---
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.subheader("Income Breakdown by Source")
+        section("Income Breakdown by Source")
         if 'Income_Source' in df_income_year.columns:
             source_group = df_income_year.groupby('Income_Source')['Net_Amount'].sum().reset_index()
-            fig_income_pie = make_pie_chart(
-                source_group, 'Net_Amount', 'Income_Source',
-                color_discrete_sequence=px.colors.qualitative.Safe
-            )
-            st.plotly_chart(fig_income_pie, use_container_width=True)
+            source_group = source_group.sort_values('Net_Amount', ascending=True)
+            fig_income = px.bar(source_group, x='Net_Amount', y='Income_Source', orientation='h',
+                                color_discrete_sequence=['#1F6B4F'],
+                                labels={'Net_Amount': 'Amount ($)', 'Income_Source': ''})
+            apply_default_layout(fig_income)
+            st.plotly_chart(fig_income, width='stretch')
         else:
             st.info("Income source classification not available.")
 
     with col_right:
-        st.subheader("Checking Spending by Category")
+        section("Checking Spending by Category")
         if not df_checking_year.empty and 'Budget_Category' in df_checking_year.columns:
-            ck_cat_group = df_checking_year.groupby('Budget_Category')['Net_Amount'].sum().reset_index()
-            fig_ck_pie = make_pie_chart(ck_cat_group, 'Net_Amount', 'Budget_Category')
-            st.plotly_chart(fig_ck_pie, use_container_width=True)
+            envelopes(envelope_rows(df_checking_year))
         else:
             st.info("No checking expenses to display.")
 
     # --- Debit vs Credit Spending ---
-    st.markdown("---")
-    st.subheader("Debit vs Credit Card Spending")
+    section("Debit vs Credit Card Spending")
 
     df_year_copy['source_type'] = 'Credit Card'
     debit_monthly = pd.DataFrame({'month_num': range(1, 13), 'Amount': 0, 'source_type': 'Checking/Debit'})
@@ -138,14 +133,13 @@ def render(df_year, df_income_year, df_checking_year):
         combined_sources, x='Month', y='Amount', color='source_type',
         barmode='stack',
         labels={'Amount': 'Amount ($)', 'source_type': 'Account'},
-        color_discrete_map={'Credit Card': '#8B5CF6', 'Checking/Debit': '#F59E0B'}
+        color_discrete_map={'Credit Card': '#46525C', 'Checking/Debit': '#D9A21B'}
     )
     apply_default_layout(fig_sources, legend_title_text="")
-    st.plotly_chart(fig_sources, use_container_width=True)
+    st.plotly_chart(fig_sources, width='stretch')
 
     # --- Income Transactions Table ---
-    st.markdown("---")
-    st.subheader("Income Transactions")
+    section("Income Transactions")
 
     income_display_cols = ['Transaction Date', 'Clean_Description', 'Net_Amount']
     if 'Income_Source' in df_income_year.columns:
@@ -159,7 +153,7 @@ def render(df_year, df_income_year, df_checking_year):
             "Income_Source": st.column_config.TextColumn("Source"),
             "Net_Amount": st.column_config.NumberColumn("Amount", format="$%.2f"),
         },
-        use_container_width=True,
+        width='stretch',
         height=400,
         hide_index=True
     )

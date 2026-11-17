@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from chart_helpers import apply_default_layout
+from ui import section
 
 
 def render(df_trans):
@@ -14,8 +15,6 @@ def render(df_trans):
         st.info("Year-over-year comparison requires at least 2 years of data. "
                 "Keep adding transaction CSVs from different years to unlock this view.")
         return
-
-    st.subheader("Year-over-Year Spending Comparison")
 
     compare_years = st.multiselect(
         "Select years to compare",
@@ -33,33 +32,37 @@ def render(df_trans):
     compare_years_str = [str(y) for y in sorted(compare_years)]
     df_compare['Year'] = df_compare['Year'].astype(str)
 
+    # most recent year gets the brand green, the next grey, then the world accents
+    _cyc = ['#1F6B4F', '#7A8580', '#D9A21B', '#4F8FC0', '#8C7BC4']
+    year_colors = {y: _cyc[i % len(_cyc)] for i, y in enumerate(reversed(compare_years_str))}
+
     # Chart 1: Monthly Spending Overlay
-    st.markdown("#### Monthly Spending by Year")
+    section("Monthly Spending by Year")
     monthly = df_compare.groupby(['Year', 'Month_Num', 'Month_Name'])['Net_Amount'].sum().reset_index()
     monthly = monthly.sort_values('Month_Num')
 
     fig_monthly = px.line(
         monthly, x='Month_Name', y='Net_Amount', color='Year',
         markers=True, labels={'Net_Amount': 'Total Spend ($)', 'Month_Name': 'Month'},
-        color_discrete_sequence=px.colors.qualitative.Set2
+        color_discrete_map=year_colors
     )
     apply_default_layout(fig_monthly, hovermode="x unified")
-    st.plotly_chart(fig_monthly, use_container_width=True)
+    st.plotly_chart(fig_monthly, width='stretch')
 
     # Chart 2: Category Comparison
-    st.markdown("#### Spending by Category per Year")
+    section("Spending by Category per Year")
     cat_compare = df_compare.groupby(['Year', 'Budget_Category'])['Net_Amount'].sum().reset_index()
 
     fig_cat = px.bar(
         cat_compare, x='Budget_Category', y='Net_Amount', color='Year',
         barmode='group', labels={'Net_Amount': 'Total ($)', 'Budget_Category': 'Category'},
-        color_discrete_sequence=px.colors.qualitative.Set2
+        color_discrete_map=year_colors
     )
     apply_default_layout(fig_cat, xaxis_tickangle=-45)
-    st.plotly_chart(fig_cat, use_container_width=True)
+    st.plotly_chart(fig_cat, width='stretch')
 
     # Chart 3: Cumulative Spending Curves
-    st.markdown("#### Cumulative Spending Through the Year")
+    section("Cumulative Spending Through the Year")
     fig_cum = go.Figure()
     for year_str in compare_years_str:
         yr_data = df_compare[df_compare['Year'] == year_str].sort_values('Transaction Date').copy()
@@ -71,10 +74,10 @@ def render(df_trans):
         ))
     apply_default_layout(fig_cum, xaxis_title="Day of Year", yaxis_title="Cumulative Spend ($)",
                          hovermode="x unified")
-    st.plotly_chart(fig_cum, use_container_width=True)
+    st.plotly_chart(fig_cum, width='stretch')
 
     # Table: YoY Change by Category
-    st.markdown("#### Year-over-Year Change by Category")
+    section("Year-over-Year Change by Category")
     if len(compare_years_str) == 2:
         yr_old, yr_new = compare_years_str
         old_cats = df_compare[df_compare['Year'] == yr_old].groupby('Budget_Category')['Net_Amount'].sum()
@@ -97,11 +100,11 @@ def render(df_trans):
                 'Change ($)': '${:+,.2f}',
                 'Change (%)': '{:+.1f}%'
             }),
-            use_container_width=True
+            width='stretch'
         )
     else:
         pivot = df_compare.groupby(['Budget_Category', 'Year'])['Net_Amount'].sum().unstack(fill_value=0)
         st.dataframe(
             pivot.style.format('${:,.2f}'),
-            use_container_width=True
+            width='stretch'
         )

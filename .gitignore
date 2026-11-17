@@ -1,5 +1,12 @@
 Data/*
+/*.csv
+/*.CSV
 transaction_notes.csv
 .claude
 CLAUDE.md
 improvements/*
+__pycache__/
+*.pyc
+.DS_Store
+graphify-out/cache/
+.playwright-mcp/

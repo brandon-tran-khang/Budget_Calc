@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from transaction_notes import (
     generate_tx_key, add_tx_keys, load_notes, save_notes,
-    merge_notes, get_all_tags, filter_by_tags, compute_tag_totals,
+    merge_notes, filter_by_tags, compute_tag_totals, count_changed_notes,
 )
 import config
 
@@ -19,7 +19,25 @@ class TestKeyGeneration:
         assert key == '2024-03-20::Amazon::29.99'
 
 
+    def test_amount_float_noise_and_int_same_key(self):
+        keys = {generate_tx_key('2024-01-15', 'Shop', a) for a in (5.25, 5.250000001, 5.2500)}
+        assert keys == {'2024-01-15::Shop::5.25'}
+        assert generate_tx_key('2024-01-15', 'Shop', 100) == generate_tx_key('2024-01-15', 'Shop', 100.0)
+
+
 class TestAddTxKeys:
+    def test_keys_independent_of_row_order(self):
+        df = pd.DataFrame({
+            'Transaction Date': pd.to_datetime(['2024-01-15'] * 2 + ['2024-01-16']),
+            'Clean_Description': ['Shop'] * 2 + ['Cafe'],
+            'Net_Amount': [5.25] * 2 + [1.0],
+            'Source': ['B', 'A', 'A'],
+        })
+        a = add_tx_keys(df)['_tx_key']
+        b = add_tx_keys(df.iloc[::-1])['_tx_key']
+        assert a.sort_index().tolist() == b.sort_index().tolist()
+        assert a.is_unique
+
     def test_unique_keys_for_duplicates(self, sample_transactions):
         """Phase 1a fix: duplicate transactions should get unique keys."""
         df = add_tx_keys(sample_transactions)
@@ -94,6 +112,18 @@ class TestSaveLoadRoundTrip:
         assert loaded.iloc[0]['_tx_key'] == '2024-01-15::Starbucks::5.25::0'
 
 
+    def test_old_repr_amounts_migrated(self, tmp_path, monkeypatch):
+        notes_file = tmp_path / "test_notes.csv"
+        monkeypatch.setattr(config, "NOTES_FILE", notes_file)
+        pd.DataFrame({
+            '_tx_key': ['2024-01-15::Shop::12.5::0', '2024-01-15::A::B::100.0::0', '2024-01-16::Shop::100.0', '2024-01-15::Shop::n/a::0'],
+            'Note': ['a', 'b', 'd', 'c'],
+            'Tags': ['', '', '', ''],
+        }).to_csv(notes_file, index=False)
+        assert load_notes()['_tx_key'].tolist() == [
+            '2024-01-15::Shop::12.50::0', '2024-01-15::A::B::100.00::0', '2024-01-16::Shop::100.00::0', '2024-01-15::Shop::n/a::0']
+
+
 class TestMergeNotes:
     def test_merge_adds_note_columns(self, sample_transactions):
         df = add_tx_keys(sample_transactions)
@@ -152,3 +182,28 @@ class TestFilterByTags:
         df = pd.DataFrame({'Tags': ['A'], 'Net_Amount': [1]})
         result = filter_by_tags(df, [])
         assert len(result) == 1
+
+
+def test_count_changed_notes_counts_edited_rows():
+    before = pd.DataFrame({"Note": ["a", "b"], "Tags": ["", "x"]})
+    after = pd.DataFrame({"Note": ["a", "B"], "Tags": ["", "x"]})
+    assert count_changed_notes(before, after) == 1
+
+
+def test_count_changed_notes_blank_values_are_equal():
+    before = pd.DataFrame({"Note": [None, float("nan")], "Tags": ["", None]})
+    after = pd.DataFrame({"Note": ["", ""], "Tags": [None, ""]})
+    assert count_changed_notes(before, after) == 0
+
+
+def test_load_notes_empty_file_is_no_notes_but_parse_error_raises(tmp_path, monkeypatch):
+    notes_file = tmp_path / "notes.csv"
+    notes_file.write_bytes(b"")
+    monkeypatch.setattr(config, "NOTES_FILE", notes_file)
+    assert list(load_notes().columns) == ["_tx_key", "Note", "Tags"]
+
+    def boom(*a, **k):
+        raise ValueError("bad csv")
+    monkeypatch.setattr(pd, "read_csv", boom)
+    with pytest.raises(ValueError):
+        load_notes()

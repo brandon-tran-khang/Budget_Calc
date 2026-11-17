@@ -1,0 +1,714 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-16T09:21:55+00:00",
+  "title": "Design System: Budget Calc",
+  "extensions": {
+    "colorMeta": {
+      "ledger-green": {
+        "role": "primary",
+        "displayName": "Ledger Green",
+        "canonical": "#1F6B4F",
+        "tonalRamp": [
+          "#001205",
+          "#002F1C",
+          "#064F37",
+          "#287055",
+          "#569177",
+          "#80B29B",
+          "#ABD4C1",
+          "#E1F4EA"
+        ]
+      },
+      "ledger-green-night": {
+        "role": "primary",
+        "displayName": "Ledger Green Night",
+        "canonical": "#2E7D5B",
+        "tonalRamp": [
+          "#001105",
+          "#002E1B",
+          "#0A4F35",
+          "#257151",
+          "#4E9372",
+          "#7AB497",
+          "#A6D6BD",
+          "#DEF5E8"
+        ]
+      },
+      "slip-green": {
+        "role": "primary",
+        "displayName": "Slip Green",
+        "canonical": "#3E9A74",
+        "tonalRamp": [
+          "#001205",
+          "#002F1B",
+          "#024F35",
+          "#207152",
+          "#3B9670",
+          "#69B894",
+          "#96DBBA",
+          "#D6F8E6"
+        ]
+      },
+      "rail-green": {
+        "role": "secondary",
+        "displayName": "Rail Green",
+        "canonical": "#1F4D3A",
+        "tonalRamp": [
+          "#001106",
+          "#032D1E",
+          "#1E4C39",
+          "#436B59",
+          "#688C7B",
+          "#8EAE9E",
+          "#B6D1C3",
+          "#E5F2EB"
+        ]
+      },
+      "rail-green-deep": {
+        "role": "secondary",
+        "displayName": "Rail Green Deep",
+        "canonical": "#17402F",
+        "tonalRamp": [
+          "#001106",
+          "#052D1E",
+          "#244B3A",
+          "#486A5A",
+          "#6C8B7B",
+          "#91AD9F",
+          "#B8D0C4",
+          "#E6F2EC"
+        ]
+      },
+      "rail-mint": {
+        "role": "secondary",
+        "displayName": "Rail Mint",
+        "canonical": "#5BAE8C",
+        "tonalRamp": [
+          "#001106",
+          "#002E1D",
+          "#124E38",
+          "#2D7056",
+          "#479375",
+          "#68B896",
+          "#94DBBC",
+          "#D4F9E7"
+        ]
+      },
+      "rail-ink": {
+        "role": "secondary",
+        "displayName": "Rail Ink",
+        "canonical": "#E4EFE8",
+        "tonalRamp": [
+          "#090C0A",
+          "#222623",
+          "#3E4440",
+          "#5C635F",
+          "#7D8580",
+          "#9FA8A2",
+          "#C2CCC6",
+          "#EAF0EC"
+        ]
+      },
+      "rail-line": {
+        "role": "secondary",
+        "displayName": "Rail Line",
+        "canonical": "#3B6A55",
+        "tonalRamp": [
+          "#001007",
+          "#0A2C1F",
+          "#234B3A",
+          "#3E6C58",
+          "#658D7A",
+          "#8CAE9D",
+          "#B4D1C3",
+          "#E5F2EB"
+        ]
+      },
+      "rail-night": {
+        "role": "secondary",
+        "displayName": "Rail Night",
+        "canonical": "#0F2A20",
+        "tonalRamp": [
+          "#001008",
+          "#102B21",
+          "#30483E",
+          "#51675D",
+          "#73887F",
+          "#98AAA2",
+          "#BDCEC6",
+          "#E8F1ED"
+        ]
+      },
+      "rail-night-deep": {
+        "role": "secondary",
+        "displayName": "Rail Night Deep",
+        "canonical": "#0A1F17",
+        "tonalRamp": [
+          "#000F08",
+          "#162A22",
+          "#34473F",
+          "#54665E",
+          "#76877F",
+          "#9AA9A2",
+          "#C0CDC7",
+          "#EAF0ED"
+        ]
+      },
+      "rail-night-ink": {
+        "role": "secondary",
+        "displayName": "Rail Night Ink",
+        "canonical": "#D5E6DC",
+        "tonalRamp": [
+          "#070D0A",
+          "#202723",
+          "#3C443F",
+          "#5A645E",
+          "#79867F",
+          "#9BA9A1",
+          "#BECEC4",
+          "#E7F1EB"
+        ]
+      },
+      "rail-night-line": {
+        "role": "secondary",
+        "displayName": "Rail Night Line",
+        "canonical": "#2A4A3A",
+        "tonalRamp": [
+          "#001006",
+          "#102B1E",
+          "#2A4A3A",
+          "#4C695A",
+          "#6F8A7B",
+          "#94AC9F",
+          "#BBCFC4",
+          "#E8F1EC"
+        ]
+      },
+      "envelope-gold": {
+        "role": "secondary",
+        "displayName": "Envelope Gold",
+        "canonical": "#D9A21B",
+        "tonalRamp": [
+          "#1A0500",
+          "#3A1E00",
+          "#5C3B00",
+          "#815900",
+          "#A87900",
+          "#D19B13",
+          "#F4C055",
+          "#FFEBB6"
+        ]
+      },
+      "cool-paper": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#F4F6F2",
+        "tonalRamp": [
+          "#0B0B0A",
+          "#242524",
+          "#414240",
+          "#60625F",
+          "#818380",
+          "#A4A6A2",
+          "#C8CAC6",
+          "#EEEFEC"
+        ]
+      },
+      "sheet-white": {
+        "role": "neutral",
+        "displayName": "Sheet White",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#A5A5A5",
+          "#C9C9C9",
+          "#EEEEEE"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#17201B",
+        "tonalRamp": [
+          "#060D09",
+          "#1F2822",
+          "#3C443F",
+          "#5B645F",
+          "#7D8580",
+          "#A0A7A3",
+          "#C5CBC7",
+          "#ECEFED"
+        ]
+      },
+      "paper-line": {
+        "role": "neutral",
+        "displayName": "Paper Line",
+        "canonical": "#DDE3DB",
+        "tonalRamp": [
+          "#0A0C09",
+          "#232623",
+          "#40433F",
+          "#5F625D",
+          "#7F847E",
+          "#A2A7A0",
+          "#C5CBC4",
+          "#ECF0EB"
+        ]
+      },
+      "night-ground": {
+        "role": "neutral",
+        "displayName": "Night Ground",
+        "canonical": "#101714",
+        "tonalRamp": [
+          "#070D0A",
+          "#202724",
+          "#3D4441",
+          "#5C6360",
+          "#7E8481",
+          "#A1A6A4",
+          "#C5CAC8",
+          "#ECEFEE"
+        ]
+      },
+      "night-sheet": {
+        "role": "neutral",
+        "displayName": "Night Sheet",
+        "canonical": "#18221D",
+        "tonalRamp": [
+          "#050D09",
+          "#1E2823",
+          "#3B4540",
+          "#5B645F",
+          "#7C8580",
+          "#9FA7A3",
+          "#C4CBC7",
+          "#ECEFED"
+        ]
+      },
+      "night-ink": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "#E6EDE8",
+        "tonalRamp": [
+          "#0A0C0A",
+          "#232624",
+          "#3F4340",
+          "#5E625F",
+          "#7F8480",
+          "#A1A7A3",
+          "#C5CBC6",
+          "#EBF0ED"
+        ]
+      },
+      "night-line": {
+        "role": "neutral",
+        "displayName": "Night Line",
+        "canonical": "#2A3830",
+        "tonalRamp": [
+          "#050E08",
+          "#1C2821",
+          "#38463E",
+          "#58655D",
+          "#7A867F",
+          "#9DA8A2",
+          "#C2CCC6",
+          "#EBF0ED"
+        ]
+      },
+      "debit-red": {
+        "role": "semantic",
+        "displayName": "Debit Red",
+        "canonical": "#B3261E",
+        "tonalRamp": [
+          "#290000",
+          "#530000",
+          "#800404",
+          "#AF241C",
+          "#CF5649",
+          "#EC8375",
+          "#FFAEA1",
+          "#FFE3DC"
+        ]
+      },
+      "debit-red-night": {
+        "role": "semantic",
+        "displayName": "Debit Red Night",
+        "canonical": "#F2867E",
+        "tonalRamp": [
+          "#210000",
+          "#450F0F",
+          "#6B2A27",
+          "#944641",
+          "#BF635D",
+          "#EC827A",
+          "#FFA9A0",
+          "#FFDED8"
+        ]
+      },
+      "credit-green": {
+        "role": "semantic",
+        "displayName": "Credit Green",
+        "canonical": "#2E7D5B",
+        "tonalRamp": [
+          "#001105",
+          "#002E1B",
+          "#0A4F35",
+          "#257151",
+          "#4E9372",
+          "#7AB497",
+          "#A6D6BD",
+          "#DEF5E8"
+        ]
+      },
+      "credit-green-night": {
+        "role": "semantic",
+        "displayName": "Credit Green Night",
+        "canonical": "#6CC49C",
+        "tonalRamp": [
+          "#001105",
+          "#002E1C",
+          "#114E36",
+          "#2D7053",
+          "#489472",
+          "#64B993",
+          "#8CDDB7",
+          "#D0FAE4"
+        ]
+      },
+      "stock-blue": {
+        "role": "tertiary",
+        "displayName": "Stock Blue",
+        "canonical": "#4F8FC0",
+        "tonalRamp": [
+          "#000C20",
+          "#002742",
+          "#174667",
+          "#30668F",
+          "#4A89B8",
+          "#72ACDA",
+          "#9CD0FA",
+          "#D8F2FF"
+        ]
+      },
+      "stock-coral": {
+        "role": "tertiary",
+        "displayName": "Stock Coral",
+        "canonical": "#E0674F",
+        "tonalRamp": [
+          "#250000",
+          "#4B0600",
+          "#732213",
+          "#9F3E2B",
+          "#CC5A44",
+          "#F37F67",
+          "#FFA892",
+          "#FFDFD1"
+        ]
+      },
+      "stock-violet": {
+        "role": "tertiary",
+        "displayName": "Stock Violet",
+        "canonical": "#8C7BC4",
+        "tonalRamp": [
+          "#0D0421",
+          "#271D44",
+          "#45386A",
+          "#645692",
+          "#8675BC",
+          "#A899DE",
+          "#CBBFFD",
+          "#EFE9FF"
+        ]
+      },
+      "stock-rose": {
+        "role": "tertiary",
+        "displayName": "Stock Rose",
+        "canonical": "#D46A8C",
+        "tonalRamp": [
+          "#200009",
+          "#450B22",
+          "#6B263E",
+          "#95415D",
+          "#C05D7D",
+          "#E780A0",
+          "#FFA9C4",
+          "#FFDEEC"
+        ]
+      },
+      "stock-slate": {
+        "role": "tertiary",
+        "displayName": "Stock Slate",
+        "canonical": "#46525C",
+        "tonalRamp": [
+          "#060C11",
+          "#1D262E",
+          "#39444D",
+          "#57636D",
+          "#79848D",
+          "#9DA6AE",
+          "#C2CAD1",
+          "#EBEFF2"
+        ]
+      },
+      "stock-fallback": {
+        "role": "tertiary",
+        "displayName": "Stock Fallback",
+        "canonical": "#7A8580",
+        "tonalRamp": [
+          "#080C0A",
+          "#212724",
+          "#3C4441",
+          "#5A6460",
+          "#7A8580",
+          "#9EA8A3",
+          "#C2CCC7",
+          "#EBF0ED"
+        ]
+      }
+    },
+    "derivedTokens": [
+      {
+        "name": "--bc-muted",
+        "value": "color-mix(in srgb, currentColor 66%, transparent)"
+      },
+      {
+        "name": "--bc-line",
+        "value": "color-mix(in srgb, currentColor 14%, transparent)"
+      },
+      {
+        "name": "--bc-track",
+        "value": "color-mix(in srgb, currentColor 8%, transparent)"
+      },
+      {
+        "name": "--bc-surface",
+        "value": "color-mix(in srgb, currentColor 3%, transparent)"
+      },
+      {
+        "name": "--bc-primary / --bc-returned",
+        "value": "color-mix(in srgb, #3E9A74 75%, currentColor)"
+      }
+    ],
+    "categoryStocks": {
+      "source": "config.py CATEGORY_COLORS",
+      "fallback": "#7A8580"
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "The one out-of-pocket figure on Overview."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Bare metric values."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headers."
+      },
+      "title-sm": {
+        "displayName": "Title Small",
+        "purpose": "Receipts panel heading."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Breakdown line, receipt detail."
+      },
+      "body-strong": {
+        "displayName": "Body Strong",
+        "purpose": "Envelope names and amounts."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Section captions, context line, timestamps."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase rail group headers and the Filters label."
+      },
+      "brand": {
+        "displayName": "Brand",
+        "purpose": "Rail wordmark."
+      }
+    },
+    "shadows": [],
+    "patterns": [
+      {
+        "name": "hatched-slip",
+        "value": "repeating-linear-gradient(135deg, var(--c) 0 2px, transparent 2px 6px); opacity .7",
+        "purpose": "Money returned to an envelope."
+      },
+      {
+        "name": "envelope-flap",
+        "value": "border: 13px solid transparent; border-top: 9px solid rgba(0,0,0,.18)",
+        "purpose": "Flap on category chips."
+      },
+      {
+        "name": "focus-ring",
+        "value": "outline: 2px solid var(--bc-primary); outline-offset: 2px",
+        "purpose": "All focusable elements."
+      }
+    ],
+    "motion": [
+      {
+        "name": "bar-draw",
+        "value": "420ms cubic-bezier(.16,1,.3,1), scaleX from 0, 30ms stagger per row (max 8)",
+        "purpose": "Envelope bars draw in once."
+      },
+      {
+        "name": "page-fade",
+        "value": "180ms ease-out, opacity 0 and 4px rise",
+        "purpose": "Main sheet entrance."
+      },
+      {
+        "name": "state",
+        "value": "150ms on background-color, color, border-color",
+        "purpose": "Buttons, links, tabs."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "all animation and transition removed",
+        "purpose": "prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "envelope-list-narrow",
+        "value": "440px (container query on the list)"
+      },
+      {
+        "name": "phone",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Envelope Row",
+      "kind": "custom",
+      "refersTo": "envelope-track",
+      "description": "Signature ledger line: flap chip, net bar in the category stock, hatched slip for returned money, amount.",
+      "html": "<div class=\"ds-env\" style=\"--c:#E0674F\"><div class=\"ds-nm\"><i class=\"ds-chip\"></i><span>Restaurants</span></div><div class=\"ds-track\"><div class=\"ds-net\" style=\"width:62%\"></div><div class=\"ds-ret\" style=\"width:18%\"></div></div><div class=\"ds-amt\">$412.80</div><div class=\"ds-rl\">returned $96.00</div></div>",
+      "css": ".ds-env{--bc-ink:#17201B;--bc-muted:rgba(23,32,27,.66);--bc-line:rgba(23,32,27,.14);--bc-track:rgba(23,32,27,.08);--bc-surface:rgba(23,32,27,.03);--bc-primary:#36805F;font-family:'Public Sans',sans-serif;font-variant-numeric:tabular-nums;display:grid;grid-template-columns:minmax(130px,190px) 1fr 96px;align-items:center;gap:4px 16px;padding:12px 0;border-top:1px solid var(--bc-line);color:var(--bc-ink)}.ds-nm{display:flex;align-items:center;gap:12px;font-weight:600;font-size:14px}.ds-chip{position:relative;width:26px;height:18px;border-radius:2px;background:var(--c);flex:none}.ds-chip:before{content:'';position:absolute;left:0;top:0;border:13px solid transparent;border-top:9px solid rgba(0,0,0,.18);border-bottom:0}.ds-track{height:14px;background:var(--bc-track);border-radius:3px;overflow:hidden;display:flex}.ds-net{background:var(--c);transform-origin:left;animation:ds-draw 420ms cubic-bezier(.16,1,.3,1) both}.ds-ret{opacity:.7;transform-origin:left;background:repeating-linear-gradient(135deg,var(--c) 0 2px,transparent 2px 6px);animation:ds-draw 420ms cubic-bezier(.16,1,.3,1) both}@keyframes ds-draw{from{transform:scaleX(0)}}.ds-amt{text-align:right;font-weight:600;font-size:14px}.ds-rl{grid-column:2;font-size:12px;color:var(--bc-primary)}@media (prefers-reduced-motion:reduce){.ds-net,.ds-ret{animation:none}}"
+    },
+    {
+      "name": "Envelope Chip",
+      "kind": "chip",
+      "refersTo": "envelope-chip",
+      "description": "Category stock block with a darker triangular flap; the category's identity everywhere.",
+      "html": "<i class=\"ds-chip\" style=\"--c:#D9A21B\"></i>",
+      "css": ".ds-chip{position:relative;display:inline-block;width:26px;height:18px;border-radius:2px;background:var(--c)}.ds-chip:before{content:'';position:absolute;left:0;top:0;border:13px solid transparent;border-top:9px solid rgba(0,0,0,.18);border-bottom:0}"
+    },
+    {
+      "name": "Hero Figure",
+      "kind": "custom",
+      "refersTo": "hero-figure",
+      "description": "The one display-size out-of-pocket figure with its period inline and the breakdown below.",
+      "html": "<section class=\"ds-hero\"><div class=\"ds-big\">$3,284.17<small>out of pocket · March 2026</small></div><div class=\"ds-brk\">Gross <b>$3,612.40</b> · Refunds <b>−$128.23</b> · Reimbursed <b>−$200.00</b></div></section>",
+      "css": ".ds-hero{--bc-ink:#17201B;--bc-muted:rgba(23,32,27,.66);--bc-line:rgba(23,32,27,.14);--bc-track:rgba(23,32,27,.08);--bc-surface:rgba(23,32,27,.03);--bc-primary:#36805F;font-family:'Public Sans',sans-serif;font-variant-numeric:tabular-nums;color:var(--bc-ink)}.ds-big{font-size:clamp(56px,8vw,96px);font-weight:800;line-height:1;letter-spacing:-.03em}.ds-big small{font-size:15px;font-weight:600;letter-spacing:0;margin-left:12px;color:var(--bc-muted)}.ds-brk{padding:10px 0;color:var(--bc-muted);line-height:1.7;font-size:14px}.ds-brk b{color:var(--bc-ink);font-weight:600}"
+    },
+    {
+      "name": "Rail Navigation",
+      "kind": "nav",
+      "refersTo": "rail-nav-item-active",
+      "description": "Green rail with uppercase group headers and a paper pill for the active page.",
+      "html": "<nav class=\"ds-rail\"><div class=\"ds-brand\">Budget Calc</div><header>Review</header><a aria-current=\"page\" href=\"#\">Overview</a><a href=\"#\">Vendors</a><header>Clean up</header><a href=\"#\">Transactions</a></nav>",
+      "css": ".ds-rail{font-family:'Public Sans',sans-serif;background:#1F4D3A;color:#E4EFE8;padding:16px;width:240px;display:flex;flex-direction:column;gap:4px}.ds-brand{font-weight:800;font-size:18px;letter-spacing:-.01em;padding-left:22px;background:linear-gradient(#D9A21B,#D9A21B) left center/14px 10px no-repeat;margin-bottom:12px}.ds-rail header{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;opacity:.7;margin-top:12px}.ds-rail a{color:inherit;text-decoration:none;border-radius:6px;padding:2px 10px;font-size:14px;transition:background-color 150ms,color 150ms}.ds-rail a:hover{background:rgba(255,255,255,.08)}.ds-rail a[aria-current=page]{background:#F4F6F2;color:#1F4D3A;font-weight:600}.ds-rail a:focus-visible{outline:2px solid #5BAE8C;outline-offset:2px}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Save or confirm on a cleanup form; Ledger Green fill with an icon.",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H5V5h10v4z\"/></svg>Save changes</button>",
+      "css": ".ds-btn-primary{font-family:'Public Sans',sans-serif;display:inline-flex;align-items:center;gap:8px;background:#1F6B4F;color:#fff;border:1px solid #1F6B4F;border-radius:6px;padding:6px 12px;font-size:14px;cursor:pointer;transition:background-color 150ms,border-color 150ms}.ds-btn-primary:hover{background:#17402F;border-color:#17402F}.ds-btn-primary:focus-visible{outline:2px solid #36805F;outline-offset:2px}"
+    },
+    {
+      "name": "Metric",
+      "kind": "custom",
+      "refersTo": "metric-value",
+      "description": "Bare metric: muted label over a 26px value, no card.",
+      "html": "<div class=\"ds-metric\"><div class=\"ds-ml\">Transactions</div><div class=\"ds-mv\">142</div></div>",
+      "css": ".ds-metric{--bc-ink:#17201B;--bc-muted:rgba(23,32,27,.66);--bc-line:rgba(23,32,27,.14);--bc-track:rgba(23,32,27,.08);--bc-surface:rgba(23,32,27,.03);--bc-primary:#36805F;font-family:'Public Sans',sans-serif;font-variant-numeric:tabular-nums;color:var(--bc-ink)}.ds-ml{color:var(--bc-muted);font-size:13px;font-weight:600}.ds-mv{font-size:26px;font-weight:600;letter-spacing:-.01em}"
+    },
+    {
+      "name": "Receipts Panel",
+      "kind": "card",
+      "refersTo": "receipts-panel",
+      "description": "The one boxed surface: session edits, newest first.",
+      "html": "<div class=\"ds-panel\"><h4>Changes this session</h4><div class=\"ds-it\"><b>Recategorized Corner Market → Groceries</b><span>Mar 14 09:12</span></div><div class=\"ds-it\"><b>Saved notes for 3 transactions</b><span>Mar 14 09:10</span></div></div>",
+      "css": ".ds-panel{--bc-ink:#17201B;--bc-muted:rgba(23,32,27,.66);--bc-line:rgba(23,32,27,.14);--bc-track:rgba(23,32,27,.08);--bc-surface:rgba(23,32,27,.03);--bc-primary:#36805F;font-family:'Public Sans',sans-serif;font-variant-numeric:tabular-nums;color:var(--bc-ink);background:var(--bc-surface);border:1px solid var(--bc-line);border-radius:8px;padding:14px 18px}.ds-panel h4{font-size:15px;font-weight:600;margin:0 0 6px}.ds-it{padding:10px 0;border-top:1px solid var(--bc-line)}.ds-it:first-of-type{border-top:0}.ds-it b{font-weight:600;font-size:14px;display:block}.ds-it span{color:var(--bc-muted);font-size:13px}"
+    },
+    {
+      "name": "Section Header",
+      "kind": "custom",
+      "refersTo": "section-title",
+      "description": "18px title with an optional muted caption.",
+      "html": "<div class=\"ds-sec\"><h3>Envelopes</h3><p>Spent per category; hatched slip is money that came back.</p></div>",
+      "css": ".ds-sec{--bc-ink:#17201B;--bc-muted:rgba(23,32,27,.66);--bc-line:rgba(23,32,27,.14);--bc-track:rgba(23,32,27,.08);--bc-surface:rgba(23,32,27,.03);--bc-primary:#36805F;font-family:'Public Sans',sans-serif;font-variant-numeric:tabular-nums;color:var(--bc-ink)}.ds-sec h3{font-size:18px;font-weight:600;margin:0}.ds-sec p{margin:2px 0 0;font-size:13px;color:var(--bc-muted)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Cash Envelopes",
+    "overview": "\n**Creative North Star: \"Cash Envelopes\"**\n\nEvery budget category is an envelope. Spending leaves it; refunds and reimbursements slip back in; out-of-pocket is what is really gone. The system is a bank-envelope green rail beside a cool paper ledger: navigation and filters live on the rail, and the main sheet reads like a statement, one monumental out-of-pocket figure first, then the envelopes it left from, then the receipts behind any edit.\n\nDensity is ledger-like, not dashboard-like. Hierarchy comes from scale and weight alone; metrics sit bare on the paper with no cards, rows are separated by single hairlines, and the only boxed surface is the session receipts panel. Color belongs to the categories: each envelope has one stock color that appears identically on its chip, its bar and its chart series, so the palette's loudest notes are data, never chrome. The build refuses the category default of white KPI cards, a donut and an indigo accent.\n\nThe world works in both Streamlit themes. The main sheet's custom tokens derive from the inherited text color, so they follow a light/dark toggle without a rerun; the rail stays green in both themes, deepening to a green-black at night.",
+    "keyCharacteristics": [
+      "Green rail carrying grouped navigation (Review, Money flow, Clean up) and filters.",
+      "Cool paper ground, green-black ink; deep green-black ground in dark mode.",
+      "One envelope-stock color per category, shared by chips, bars, tables and charts.",
+      "Public Sans, self-hosted, with tabular figures on everything.",
+      "Envelope-flap chips and the hatched slip for returned money.",
+      "Flat paper: hairlines and a faint tint, no shadows."
+    ],
+    "rules": [
+      {
+        "name": "The Envelope Stock Rule",
+        "body": "A category has exactly one color, taken from `CATEGORY_COLORS`, and it is used identically on its chip, its bar, its table cell and its chart series. A new category gets a stock from its family; an unmapped one gets Stock Fallback. Never recolor a category per chart.",
+        "section": "colors"
+      },
+      {
+        "name": "The Data-Owns-Color Rule",
+        "body": "Chrome is green, paper and ink. Saturated hues are reserved for category stocks and the debit/credit semantics; no decorative accent sits outside those roles.",
+        "section": "colors"
+      },
+      {
+        "name": "The Derived Token Rule",
+        "body": "Sheet tokens are mixes of `currentColor` so they follow the client-side theme toggle. Never hard-code a light-only hex into sheet CSS.",
+        "section": "colors"
+      },
+      {
+        "name": "The Scale-Alone Rule",
+        "body": "Rank by size and weight, never by color or boxes. One display figure per page; everything else steps down through 26, 18, 14 and 13px.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "`font-variant-numeric: tabular-nums` is set on the whole app. Money is formatted with a true minus (−) and two decimals.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Paper Rule",
+        "body": "Surfaces are flat. Separate with a hairline or a 3% tint; never with a drop shadow or a card stack.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do color every category from `CATEGORY_COLORS`, the same way in chips, bars, tables and charts (The Envelope Stock Rule).",
+      "Do draw returned money as the hatched slip in the category's own stock, never as a separate hue.",
+      "Do call `receipt()` after every saved edit so it toasts and lands in the session receipts panel.",
+      "Do keep metrics bare: no border, no card, hierarchy by size.",
+      "Do build sheet colors from the `--bc-*` tokens so light and dark both work.",
+      "Do honor reduced motion: every animation and transition is removed under `prefers-reduced-motion: reduce`.",
+      "Do pair color with a text label (category name, legend) so categories never separate by hue alone."
+    ],
+    "donts": [
+      "Don't wrap metrics in white KPI cards, reach for a donut chart, or introduce an indigo accent; the thesis refuses all three.",
+      "Don't add drop shadows; depth is hairlines and tint (The Flat Paper Rule).",
+      "Don't add a second display-size figure to a page.",
+      "Don't hard-code light-only hexes into sheet CSS; derive from `currentColor`.",
+      "Don't load another typeface or a fourth weight; Public Sans 400/600/800 is the whole kit."
+    ]
+  }
+}

@@ -1,30 +1,21 @@
 """Shared Plotly chart styling helpers to reduce repetition across tabs."""
 
-import plotly.express as px
 
 
-def apply_default_layout(fig, height=350, **kwargs):
-    """Apply standard chart styling to a Plotly figure."""
+def apply_default_layout(fig, height=350, time_series=False, **kwargs):
+    """Apply standard chart styling to a Plotly figure (theme adapts via st.plotly_chart's streamlit theme)."""
     defaults = dict(
-        template="plotly_white",
         height=height,
+        font=dict(family="Public Sans, sans-serif"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(t=24, l=8, r=8, b=8),
+        title=dict(text=""),
     )
+    if time_series:
+        defaults["hovermode"] = "x unified"
     defaults.update(kwargs)
     fig.update_layout(**defaults)
-    return fig
-
-
-def make_pie_chart(data, values, names, height=350, **kwargs):
-    """Create a consistently styled donut chart."""
-    color_seq = kwargs.pop('color_discrete_sequence', px.colors.qualitative.Prism)
-    fig = px.pie(
-        data, values=values, names=names, hole=0.6,
-        color_discrete_sequence=color_seq,
-    )
-    fig.update_layout(
-        height=height,
-        showlegend=kwargs.pop('showlegend', True),
-        margin=kwargs.pop('margin', dict(t=10, b=0, l=0, r=0)),
-        **kwargs,
-    )
+    fig.update_xaxes(gridcolor="rgba(128,140,134,.18)")
+    fig.update_yaxes(gridcolor="rgba(128,140,134,.18)")
     return fig

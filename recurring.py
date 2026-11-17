@@ -62,19 +62,6 @@ def detect_recurring_merchants(df, amount_tolerance=2.0, min_consecutive_months=
             continue
 
         # Check if they are consecutive (e.g., 2026-01, 2026-02)
-        consecutive = 1
-        max_run = 1
-        for i in range(1, len(months_list)):
-            if months_list[i] == months_list[i-1] + 1:
-                consecutive += 1
-            else:
-                max_run = max(max_run, consecutive)
-                consecutive = 1
-        max_run = max(max_run, consecutive)
-        
-        if max_run < min_consecutive_months:
-            continue
-
         consecutive = _get_longest_consecutive_run(months_list)
         if consecutive < min_consecutive_months:
             continue
@@ -92,7 +79,11 @@ def detect_recurring_merchants(df, amount_tolerance=2.0, min_consecutive_months=
         median_amount = group['monthly_total'].median()
         top_category = df.loc[df['Clean_Description'] == merchant, 'Budget_Category'].mode()
         category = top_category.iloc[0] if not top_category.empty else 'Personal'
-        active_range = ', '.join(MONTH_NAMES[m.month] for m in months_list)
+        multi_year = len({m.year for m in months_list}) > 1
+        active_range = ', '.join(
+            f"{MONTH_NAMES[m.month]} {m.year}" if multi_year else MONTH_NAMES[m.month]
+            for m in months_list
+        )
 
         results.append({
             'Clean_Description': merchant,
@@ -139,7 +130,8 @@ def detect_subscription_changes(df, amount_tolerance=2.0, min_consecutive_months
         return []
 
     df = df.copy()
-    df['month_num'] = df['Transaction Date'].dt.month
+    # Calendar periods (year + month) so Jan 2025 and Jan 2026 are distinct months
+    df['month_num'] = df['Transaction Date'].dt.to_period('M')
     available_months = sorted(df['month_num'].unique())
 
     if len(available_months) < (min_consecutive_months * 2):

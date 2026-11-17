@@ -1,7 +1,6 @@
 """Tests for recurring.py — detection, classification, subscription changes."""
 
 import pandas as pd
-import pytest
 from recurring import (
     _get_longest_consecutive_run,
     detect_recurring_merchants,
@@ -84,6 +83,26 @@ class TestDetectRecurringMerchants:
         result = detect_recurring_merchants(df, max_monthly_frequency=10.0)
         assert not result.empty
 
+    def test_active_range_includes_year_when_spanning_years(self):
+        df = pd.DataFrame({
+            'Transaction Date': pd.to_datetime(['2025-12-10', '2026-01-10', '2026-02-10']),
+            'Clean_Description': ['Netflix'] * 3,
+            'Budget_Category': ['Personal'] * 3,
+            'Net_Amount': [15.99] * 3,
+        })
+        result = detect_recurring_merchants(df)
+        assert result.iloc[0]['Active_Range'] == 'Dec 2025, Jan 2026, Feb 2026'
+
+    def test_active_range_plain_month_names_within_one_year(self):
+        df = pd.DataFrame({
+            'Transaction Date': pd.to_datetime(['2026-01-10', '2026-02-10']),
+            'Clean_Description': ['Netflix'] * 2,
+            'Budget_Category': ['Personal'] * 2,
+            'Net_Amount': [15.99] * 2,
+        })
+        result = detect_recurring_merchants(df)
+        assert result.iloc[0]['Active_Range'] == 'Jan, Feb'
+
 
 class TestClassifyTransactions:
     def test_classifies_recurring(self, recurring_transactions):
@@ -144,3 +163,18 @@ class TestSubscriptionChanges:
             'Net_Amount': [15.99, 15.99],
         })
         assert detect_subscription_changes(df) == []
+
+    def test_months_distinct_across_years(self):
+        """Nov 2025 - Feb 2026: Jan/Feb 2026 are the recent half, Nov/Dec 2025 the earlier half."""
+        df = pd.DataFrame({
+            'Transaction Date': pd.to_datetime([
+                '2025-11-10', '2025-12-10',  # Gym: only in earlier half
+                '2026-01-10', '2026-02-10',  # Hulu: only in recent half
+            ]),
+            'Clean_Description': ['Gym', 'Gym', 'Hulu', 'Hulu'],
+            'Budget_Category': ['Gym Membership', 'Gym Membership', 'Personal', 'Personal'],
+            'Net_Amount': [30.00, 30.00, 12.00, 12.00],
+        })
+        alerts = detect_subscription_changes(df)
+        by_merchant = {a['merchant']: a['type'] for a in alerts}
+        assert by_merchant == {'Hulu': 'new', 'Gym': 'cancelled'}
